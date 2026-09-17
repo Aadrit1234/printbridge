@@ -274,7 +274,16 @@ tunnels (`*.trycloudflare.com`) are not — a changed backend URL stops being in
 
 - **Backend:** pull on the always-on box and restart the service (or `git pull &&
   systemctl restart printbridge`).
-- **Frontend:** `git push` — Vercel rebuilds on every push to `main`.
+- **Frontend, with Git connected:** Vercel → your project → Settings → Git →
+  connect the GitHub repo, and every push to `main` deploys automatically. The
+  first deploy can be done either way:
+
+  ```bash
+  vercel --prod          # from the project folder, deploy what is on disk
+  ```
+
+  A CLI deploy uploads the working copy; it does not by itself make future
+  pushes deploy. Connect Git once, then `git push` is enough.
 - Both are versioned together; the version is printed in Admin → Settings →
   About and in `dist/deployment.json`.
 
