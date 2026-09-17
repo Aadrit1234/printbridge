@@ -11,6 +11,28 @@ const os = require('os');
 const path = require('path');
 const QRCode = require('qrcode');
 
+/**
+ * .env support, without a dependency: KEY=value lines in ./.env become
+ * defaults, and anything already in the real environment wins — so a service
+ * manager (systemd, Task Scheduler, Docker) can still override the file.
+ * This is where ALLOWED_ORIGINS and friends belong on a permanent install.
+ */
+function loadEnvFile(file) {
+  let raw;
+  try { raw = fs.readFileSync(file, 'utf8'); } catch { return; }
+  for (const line of raw.split(/\r?\n/)) {
+    const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+    if (!match || process.env[match[1]] !== undefined) continue;
+    let value = match[2];
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    process.env[match[1]] = value;
+  }
+}
+
+loadEnvFile(path.join(__dirname, '.env'));
+
 const PORT = parseInt(process.env.PORT, 10) || 8088;
 const HOST = process.env.HOST || '0.0.0.0';
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');

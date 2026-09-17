@@ -2,6 +2,9 @@
 node_modules/
 dist/
 
+# Vercel project link (local ids, not secrets — but not needed in git)
+.vercel/
+
 # Runtime data — uploads, generated PDFs, previews, the outbox, jobs and the
 # admin PIN hash. Never commit this: it is your documents and your secret.
 data/
@@ -22,3 +25,5 @@ Thumbs.db
 
 # Agent scratch space
 .freebuff/
+
+.vercel
