@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
+<meta name="theme-color" content="#070b10">
+<title>PrintBridge — print from any device</title>
+<meta name="description" content="Self-hosted print server: upload from any phone or laptop, preview exactly what will print, and send it to your printer.">
+<link rel="manifest" href="/manifest.webmanifest">
+<script src="/config.js"></script>
+<link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
+<link rel="alternate icon" href="/assets/icon-192.png">
+<link rel="apple-touch-icon" href="/assets/icon-192.png">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- desktop sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M7 3h10a1 1 0 0 1 1 1v3H6V4a1 1 0 0 1 1-1Z"/>
+          <path d="M4 8h16a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2v-3H5v3H3a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2Z"/>
+          <path d="M6 14h12v6a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-6Z"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <strong>PrintBridge</strong>
+        <span>network printing, no desktop</span>
+      </div>
+    </div>
+
+    <nav class="nav" id="sidebar-nav">
+      <a class="nav-item" href="#/print" data-route="print">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3"/></svg>
+        <span>Print</span>
+      </a>
+      <a class="nav-item" href="#/mine" data-route="mine">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
+        <span>My prints</span>
+        <span class="nav-badge" id="nav-badge-mine" hidden></span>
+      </a>
+    </nav>
+
+    <div class="nav-foot">
+      <a class="admin-link" id="admin-link" href="/admin" data-admin-link>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6l7-3Z"/></svg>
+        <span>Admin</span>
+      </a>
+      <div id="sidebar-printer">printer: connecting…</div>
+      <div class="row" style="margin-top:8px;gap:6px">
+        <button class="icon-btn" id="btn-install" title="Install as app" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-theme" title="Switch theme">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- mobile top bar -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M7 3h10a1 1 0 0 1 1 1v3H6V4a1 1 0 0 1 1-1Z"/>
+          <path d="M4 8h16a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2v-3H5v3H3a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2Z"/>
+          <path d="M6 14h12v6a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-6Z"/>
+        </svg>
+      </div>
+      <div class="brand-text"><strong id="topbar-title">Print</strong></div>
+    </div>
+    <div class="topbar-actions">
+      <button class="status-pill" id="status-pill" title="Printer status">
+        <span class="dot" id="status-dot"></span>
+        <span id="status-text">connecting…</span>
+      </button>
+      <button class="icon-btn" id="btn-theme-mobile" title="Switch theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="view" aria-live="polite"></main>
+
+  <nav class="bottomnav" id="bottomnav">
+    <a href="#/print" data-route="print">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3"/></svg>
+      <span>Print</span>
+    </a>
+    <a href="#/mine" data-route="mine">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
+      <span>My prints</span>
+    </a>
+    <a href="/admin" class="bottomnav-admin" data-admin-link>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6l7-3Z"/></svg>
+      <span>Admin</span>
+    </a>
+  </nav>
+
+  <div class="toaster" id="toaster"></div>
+  <div id="overlay-host"></div>
+</div>
+
+<div class="sr-only" role="status" id="live-region"></div>
+<script type="module" src="/app/main.js"></script>
+</body>
+</html>

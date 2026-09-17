@@ -1,0 +1,20 @@
+<!-- PrintBridge mark: the Lucide "printer" icon (https://lucide.dev, ISC License)
+     on the brand tile. Vector, so browsers and OS launchers render it crisply at
+     any size; the rasterized PNGs next to it are only for PWA installers. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2dd4bf"/>
+      <stop offset="0.55" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="46" fill="#070b10"/>
+  <rect x="19" y="19" width="154" height="154" rx="46" fill="url(#g)"/>
+  <g transform="translate(57.6 57.6) scale(3.2)" fill="none" stroke="#05131a" stroke-width="1.9"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+    <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/>
+    <rect x="6" y="14" width="12" height="8" rx="1"/>
+  </g>
+</svg>

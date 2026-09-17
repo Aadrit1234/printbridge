@@ -1,0 +1,31 @@
+{
+  "name": "printbridge",
+  "version": "2.1.0",
+  "description": "Self-hosted print server + web app: upload from any phone or laptop, preview exactly what will print, and print it — over a USB Windows queue, IPP/AirPrint, or CUPS.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "build:web": "node scripts/build-web.cjs",
+    "check": "node --check server.js && node --check src/app.js && node --check src/cors.js && node --check src/config.js && node --check src/logger.js && node --check src/storage.js && node --check src/events.js && node --check src/routes/jobs.js && node --check src/routes/files.js && node --check src/routes/printer.js && node --check src/routes/system.js && node --check src/services/queue.js && node --check src/services/converter.js && node --check src/services/rasterizer.js && node --check src/services/render.js && node --check src/services/discovery.js && node --check src/services/remote.js && node --check src/services/watchdog.js && node --check src/services/backends/registry.js && node --check src/services/backends/spooler.js && node --check src/services/backends/ipp.js && node --check src/services/backends/cups.js && node --check src/services/backends/outbox.js && node --check src/services/tools/windows.js && node --check scripts/fake-printer.cjs && node --check scripts/smoke-ipp.cjs && node --check scripts/build-web.cjs",
+    "smoke": "node scripts/smoke.cjs",
+    "smoke:ipp": "node scripts/smoke-ipp.cjs",
+    "fake-printer": "node scripts/fake-printer.cjs",
+    "icons": "node scripts/make-icons.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.65",
+    "bonjour-service": "^1.2.1",
+    "express": "^4.21.2",
+    "ipp": "^2.0.1",
+    "multer": "^2.0.2",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.33.5"
+  }
+}

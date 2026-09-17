@@ -1,0 +1,66 @@
+/* Admin-only styles, layered on the shared design system (assets/app.css).
+ * The guest app never loads this file. */
+
+.topbar-sub { text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; color: var(--text-mute); }
+
+/* ---------------------------------------------------------------- sign in */
+
+/* While signed out there is no shell: just the door. */
+body.admin-locked .sidebar,
+body.admin-locked .topbar,
+body.admin-locked .bottomnav { display: none; }
+body.admin-locked main { margin-left: 0 !important; padding: 20px 16px 40px; }
+
+.login-wrap { min-height: 78vh; display: grid; place-items: center; }
+.login-card { width: 100%; max-width: 400px; text-align: center; }
+.login-mark {
+  width: 54px; height: 54px; margin: 0 auto 14px; border-radius: 16px;
+  display: grid; place-items: center; color: #05131a;
+  background: var(--grad);
+}
+.login-mark svg { width: 28px; height: 28px; }
+.login-card h1 { font-size: 20px; margin-bottom: 6px; }
+.login-card p { color: var(--text-dim); font-size: 13px; }
+
+.pin-field {
+  position: relative; margin: 18px 0 12px;
+}
+.pin-input {
+  width: 100%; text-align: center;
+  font-family: var(--mono); font-size: 24px; letter-spacing: 0.42em;
+  padding: 14px 12px 14px 20px;
+}
+.pin-input::placeholder { letter-spacing: 0.42em; color: var(--text-mute); }
+
+.login-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+.login-hint { font-size: 11.5px; color: var(--text-mute); text-align: left; line-height: 1.5; }
+
+/* ------------------------------------------------------------- access page */
+
+.session-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.session-row:last-child { border-bottom: 0; }
+.session-meta { font-family: var(--mono); font-size: 11.5px; color: var(--text-mute); }
+.session-current { background: var(--accent-soft); border-radius: 8px; padding: 10px; border-bottom: 0; }
+
+.device-chip {
+  font-family: var(--mono); font-size: 11px; color: var(--text-mute);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-full); padding: 2px 8px;
+}
+
+.pin-reveal {
+  font-family: var(--mono); font-size: 22px; letter-spacing: 0.2em;
+  background: var(--surface-2); border: 1px dashed var(--border);
+  border-radius: var(--radius); padding: 12px; text-align: center;
+}
+
+.gate-state {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px; border-radius: var(--radius);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.gate-state.open { border-color: rgba(251, 113, 133, 0.4); }
+.gate-state svg { width: 18px; height: 18px; }
