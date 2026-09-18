@@ -45,8 +45,20 @@ module.exports = {
     return Boolean(await resolveEngine());
   },
 
-  async state() {
-    const queue = config.get('spoolerQueue');
+  /**
+   * Usable for one specific queue, when a job picked its own printer. The queue
+   * itself has to exist: a target naming a queue this machine does not have is
+   * refused up front instead of being queued against something that is gone.
+   */
+  async availableFor(queue) {
+    if (!isWindows || !queue) return false;
+    if (!await resolveEngine()) return false;
+    const queues = await win.listQueues().catch(() => []);
+    return queues.some(q => q.name.toLowerCase() === String(queue).toLowerCase());
+  },
+
+  async state(queueOverride) {
+    const queue = queueOverride || config.get('spoolerQueue');
     const engine = await resolveEngine();
 
     if (!queue) {
@@ -104,7 +116,7 @@ module.exports = {
   },
 
   async print({ job, filePath, options = {} }) {
-    const queue = config.get('spoolerQueue');
+    const queue = options.queue || config.get('spoolerQueue');
     if (!queue) throw new Error('No Windows print queue selected');
     const engine = await resolveEngine();
     if (!engine) throw new Error('No silent print engine available (install SumatraPDF or Adobe Reader)');

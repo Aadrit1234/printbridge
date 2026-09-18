@@ -32,7 +32,6 @@ const DEFAULTS = {
   scale: 'fit',
   keepAliveMinutes: 0,
   retryWindowMinutes: 30, // keep retrying a job while the printer is asleep/offline
-  remoteUrl: '',          // public/VPN address this server is reached on from outside
   retentionHours: 48,
   maxUploadMb: 25,
   maxPreviewPages: 40,
@@ -71,11 +70,6 @@ function sanitize(patch) {
   }
   if (p.keepAliveMinutes !== undefined) out.keepAliveMinutes = clampInt(p.keepAliveMinutes, 0, 240, 0);
   if (p.retryWindowMinutes !== undefined) out.retryWindowMinutes = clampInt(p.retryWindowMinutes, 0, 720, DEFAULTS.retryWindowMinutes);
-  if (typeof p.remoteUrl === 'string') {
-    const url = p.remoteUrl.trim().replace(/\/+$/, '').slice(0, 300);
-    if (!url || /^https?:\/\//i.test(url)) out.remoteUrl = url;
-    else throw new Error('Remote address must start with http:// or https://');
-  }
   if (p.retentionHours !== undefined) out.retentionHours = clampInt(p.retentionHours, 1, 720, DEFAULTS.retentionHours);
   if (p.maxUploadMb !== undefined) out.maxUploadMb = clampInt(p.maxUploadMb, 1, 200, DEFAULTS.maxUploadMb);
   if (p.maxPreviewPages !== undefined) out.maxPreviewPages = clampInt(p.maxPreviewPages, 1, 200, DEFAULTS.maxPreviewPages);

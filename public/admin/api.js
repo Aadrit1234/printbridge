@@ -77,8 +77,6 @@ export const api = {
   logs: (limit = 200) => request(`/system/logs?limit=${limit}`),
   diagnostics: () => request('/system/diagnostics'),
   cleanupStorage: () => request('/system/storage/cleanup', { method: 'POST', body: {} }),
-  remoteInfo: (fresh = false) => request(`/system/remote${fresh ? '?fresh=1' : ''}`),
-  checkRemote: (url) => request('/system/remote/check', { method: 'POST', body: url ? { url } : {} }),
 
   /* ---------------- printer ---------------- */
   printerStatus: (fresh = false) => request(`/printer/status${fresh ? '?fresh=1' : ''}`),
@@ -106,7 +104,7 @@ export const api = {
   /* ---------------- pairing ---------------- */
   printQrCard: (url = '') => request(`/system/pairing/card/print${url ? `?url=${encodeURIComponent(url)}` : ''}`, { method: 'POST', body: {} }),
   qrUrl: (data) => `${BASE}/system/pairing/qr.png?data=${encodeURIComponent(data)}`,
-  /** Pass 'remote' to get the card for the away-from-home address. */
+  /** The printable QR poster for the address people print from. */
   cardUrl: (url = '') => `${BASE}/system/pairing/card.pdf${url ? `?url=${encodeURIComponent(url)}` : ''}`,
 
   /* ---------------- files ---------------- */

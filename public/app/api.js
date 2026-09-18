@@ -15,11 +15,10 @@ const CFG = window.PRINTBRIDGE_CONFIG || {};
 export const API_ORIGIN = String(CFG.apiBase || '').replace(/\/+$/, '');
 const BASE = `${API_ORIGIN}/api/v1`;
 
-/** The admin console may live on this origin or on the backend's. */
-export function adminUrl() {
-  const base = String(CFG.adminUrl || '').replace(/\/+$/, '');
-  return `${base}/admin`;
-}
+/* NOTE: the guest app deliberately knows nothing about the admin console —
+ * there is no admin link, no admin URL and no admin API in this bundle. The
+ * control room is reached by typing its address, which is what keeps this site
+ * a clean, single-purpose thing for the person printing. */
 
 export class ApiError extends Error {
   constructor(message, status, payload) {
@@ -61,6 +60,12 @@ export const api = {
   meta: () => request('/system/meta'),
   settings: () => request('/system/settings'),
   printerStatus: (fresh = false) => request(`/printer/status${fresh ? '?fresh=1' : ''}`),
+
+  /** Printers this device may choose from, plus the house default. */
+  printers: () => request('/printers'),
+
+  /** Look up a print command by its code. */
+  ticket: (token) => request(`/tickets/${encodeURIComponent(token)}`),
 
   jobs: (limit = 100) => request(`/jobs?limit=${limit}`),
   job: (id) => request(`/jobs/${encodeURIComponent(id)}`),

@@ -205,7 +205,135 @@ export function jobThumb(job) {
   return `<div class="job-thumb"><img src="${esc(thumbUrlBuilder(job.id))}" alt="" loading="lazy" onerror="this.remove()"></div>`;
 }
 
-export function jobRow(job, { actions = '', showProgress = true, extra = '' } = {}) {
+/* ---------------- print codes (tickets) ----------------
+ *
+ * Every print command gets its own code, so both the person who pressed Print
+ * and the admin reading the queue can point at the same print. These helpers
+ * are the single place that turns a ticket into markup. */
+
+/** The code of the print command this job is on right now. */
+export function tokenOf(job) {
+  if (!job) return null;
+  if (job.token) return job.token;
+  const list = Array.isArray(job.tickets) ? job.tickets : [];
+  return list.length ? list[list.length - 1].token : null;
+}
+
+/** The live ticket (the newest one) of a job. */
+export function ticketOf(job) {
+  const list = job && Array.isArray(job.tickets) ? job.tickets : [];
+  return list.length ? list[list.length - 1] : null;
+}
+
+/** All tickets of a job, newest first — one entry per print command. */
+export function ticketsOf(job) {
+  const list = job && Array.isArray(job.tickets) ? job.tickets : [];
+  return [...list].reverse();
+}
+
+const TICKET_STATES = {
+  queued: { label: 'Queued', cls: 'queued' },
+  waiting: { label: 'Waiting for printer', cls: 'waiting' },
+  printing: { label: 'Printing', cls: 'printing' },
+  printed: { label: 'Printed', cls: 'printed' },
+  failed: { label: 'Failed', cls: 'failed' },
+  canceled: { label: 'Canceled', cls: 'canceled' },
+};
+
+export function ticketStateMeta(state) {
+  return TICKET_STATES[state] || { label: state || 'queued', cls: 'queued' };
+}
+
+/** just the code, as an inline chip */
+export function printCode(token) {
+  if (!token) return '';
+  return `<span class="code-inline" title="Print code for this print command">${esc(token)}</span>`;
+}
+
+const TRACK = [
+  { key: 'queued', label: 'Queued' },
+  { key: 'printing', label: 'Printing' },
+  { key: 'printed', label: 'Printed' },
+];
+
+/**
+ * The three-step tracker under a code: where this print command has got to.
+ * "waiting" is shown as queued-and-still-trying, which is what it is from the
+ * outside: the printer has not taken it yet.
+ */
+export function ticketTrack(ticket) {
+  const state = ticket ? ticket.state : 'queued';
+  const failed = state === 'failed' || state === 'canceled';
+  const reached = state === 'printed' ? 3 : state === 'printing' ? 1 : 0;
+
+  const steps = TRACK.map((step, index) => {
+    const done = reached > index;
+    const current = !failed && reached === index;
+    const cls = [done ? 'done' : '', current ? 'current' : ''].filter(Boolean).join(' ');
+    return `
+      <div class="track-step ${cls}">
+        <span class="bullet">${done ? icons.check : index + 1}</span>
+        <span>${esc(step.label)}</span>
+      </div>`;
+  }).join('');
+
+  return `<div class="ticket-track" role="list">${steps}</div>`;
+}
+
+/**
+ * The ticket panel: the code, what it is for, and its live state.
+ * Used by the job screen, the history detail and — in admin — the queue.
+ */
+export function ticketPanel({ job, ticket, actions = '' } = {}) {
+  const t = ticket || ticketOf(job) || { state: 'queued', token: null, at: job && job.updatedAt };
+  const meta = ticketStateMeta(t.state);
+  const done = t.state === 'printed';
+  const bad = t.state === 'failed' || t.state === 'canceled';
+  const parts = String(t.token || '').split('-');
+
+  const detail = [];
+  if (t.copies) detail.push(`${t.copies} ${t.copies === 1 ? 'copy' : 'copies'}`);
+  if (t.paper) detail.push(t.paper);
+  if (t.duplex) detail.push('two-sided');
+  if (t.targetName || t.target) detail.push(t.targetName || String(t.target).replace(/^[a-z]+:/i, ''));
+  if (t.backend) detail.push(`via ${t.backend}`);
+
+  return `
+  <section class="ticket ${done ? 'done' : ''} ${bad ? 'bad' : ''}" data-token="${esc(t.token || '')}">
+    <div class="ticket-head">
+      <span class="label">Print code</span>
+      <div class="ticket-code" id="ticket-code">
+        ${parts.map(part => `<span class="seg">${esc(part)}</span>`).join('')}
+      </div>
+      <div class="small muted">${done ? 'Printed' : 'Read this out, or keep it to check later'} · ${esc(job ? job.name : '')}</div>
+    </div>
+    <div class="ticket-meta">
+      <span class="chip ${meta.cls}">${esc(meta.label)}</span>
+      ${detail.length ? `<span>${detail.map(esc).join(' · ')}</span>` : ''}
+      ${t.at ? `<span class="muted">opened ${esc(fmtAgo(t.at))}</span>` : ''}
+    </div>
+    <div class="ticket-body">
+      ${ticketTrack(t)}
+      ${t.message ? `<div class="small muted">${esc(t.message)}</div>` : ''}
+      ${t.error ? `<div class="job-error">${esc(t.error)}</div>` : ''}
+      <div class="ticket-actions">
+        ${t.token ? `<button class="btn sm ghost" data-copy="${esc(t.token)}">${icons.copy}<span>Copy code</span></button>` : ''}
+        ${done ? `<span class="chip printed">${icons.check}<span>finished</span></span>` : ''}
+        ${actions}
+      </div>
+    </div>
+  </section>`;
+}
+
+/** Delegated: any [data-copy] button copies its value. */
+export function bindCopyButtons(host) {
+  host.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-copy]');
+    if (button) copyText(button.dataset.copy, 'Print code copied');
+  });
+}
+
+export function jobRow(job, { actions = '', showProgress = true, extra = '', showCode = true } = {}) {
   const meta = statusMeta(job.status);
   const active = ACTIVE_STATUSES.includes(job.status);
   const detail = [];
@@ -235,6 +363,7 @@ export function jobRow(job, { actions = '', showProgress = true, extra = '' } = 
           ${job.backend ? `<span>via ${esc(job.backend)}</span>` : ''}
           ${extra}
         </div>
+        ${showCode && tokenOf(job) ? `<div class="row" style="gap:8px">${printCode(tokenOf(job))}${ticketOf(job) ? `<span class="small muted">${esc(ticketStateMeta(ticketOf(job).state).label)}</span>` : ''}</div>` : ''}
         ${progress}
         ${note}
       </div>

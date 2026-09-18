@@ -9,7 +9,7 @@
  *
  * API calls and preview images are never cached — they are live state. */
 
-const VERSION = 'pb-v10';
+const VERSION = 'pb-v11';
 /* Only the guest app is cached: a phone that scanned the QR keeps working on a
  * flaky connection. The admin app is deliberately never cached — it must always
  * be the current build, and it is useless offline anyway. */
@@ -25,9 +25,11 @@ const SHELL = [
   '/app/device.js',
   '/app/ui.js',
   '/app/theme.js',
+  '/app/prefs.js',
   '/app/views/print.js',
-  '/app/views/preview.js',
-  '/app/views/mine.js',
+  '/app/views/job.js',
+  '/app/views/history.js',
+  '/app/views/code.js',
 ];
 
 /* True when we are replacing an older PrintBridge cache — i.e. the user is

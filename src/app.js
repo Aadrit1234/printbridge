@@ -19,12 +19,15 @@ function bridgeSettings(settings) {
   settings.on('change', () => bus.emit('settings', { settings: settings.all() }));
 }
 
-function createApp({ publicDir, lanUrl }) {
+function createApp({ publicDir, lanUrl, lanAddresses = [] }) {
   const log = logger.make('http');
   bridgeSettings(require('./config'));
   const app = express();
   app.disable('x-powered-by');
   app.set('lanUrl', lanUrl);
+  // Every address the guest page can be reached at on this network, so the
+  // console can show them instead of pretending one URL is all there is.
+  app.set('lanAddresses', lanAddresses.length ? lanAddresses : [lanUrl].filter(Boolean));
   app.set('trust proxy', true);
 
   // Cross-origin support comes first: a preflight must be answered before the

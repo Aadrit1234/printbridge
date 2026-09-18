@@ -19,6 +19,7 @@ const storage = require('../storage');
 const queue = require('../services/queue');
 const rasterizer = require('../services/rasterizer');
 const registry = require('../services/backends/registry');
+const tickets = require('../services/tickets');
 const log = require('../logger').make('api:guest');
 const { getUploader, decodeName, uploadError, optionsFrom } = require('../upload');
 
@@ -130,6 +131,53 @@ router.post('/jobs/:id/print', deviceGate, async (req, res) => {
   }
 });
 
+/* ------------------------------------------------------------- tickets */
+
+/** Printer choices this device may send a job to (no queue internals). */
+router.get('/printers', async (req, res) => {
+  try {
+    const { printers, default: preferred, reason } = await registry.targets();
+    res.json({
+      printers: printers.map(p => ({
+        id: p.id,
+        name: p.name,
+        kind: p.kind,
+        detail: p.detail,
+        status: p.status,
+        recommended: Boolean(p.recommended || p.id === preferred),
+      })),
+      default: preferred,
+      reason,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** Look up the state of one of this device's print commands by its token. */
+router.get('/tickets/:token', deviceGate, (req, res) => {
+  const wanted = tickets.normalize(req.params.token);
+  if (!wanted) return res.status(400).json({ error: 'That does not look like a print code (PB-XXXX-XXXX)' });
+
+  for (const job of storage.list({ limit: 200, owner: req.device })) {
+    const ticket = tickets.forJob(job, wanted);
+    if (!ticket) continue;
+    return res.json({ ticket: { ...ticket, jobId: job.id, jobName: job.name, pageCount: job.pageCount } });
+  }
+  return res.status(404).json({ error: 'No print with that code belongs to this device' });
+});
+
+/** Send a job that already exists again — a fresh print command, a fresh code. */
+router.post('/jobs/:id/retry', deviceGate, async (req, res) => {
+  const job = ownJob(req, res);
+  if (!job) return;
+  try {
+    res.json(await queue.retry(job.id));
+  } catch (e) {
+    res.status(409).json({ error: e.message });
+  }
+});
+
 router.post('/jobs/:id/cancel', deviceGate, async (req, res) => {
   const job = ownJob(req, res);
   if (!job) return;
@@ -225,16 +273,15 @@ router.get('/printer/status', async (req, res) => {
   res.json({ printer: slimPrinter(snapshot) });
 });
 
+/* The guest side is the whole product for anyone who scans the code: it names
+ * the app and nothing about the control room behind it. */
 router.get('/system/meta', (req, res) => {
-  const auth = require('../auth');
   res.json({
     appName: config.get('appName'),
     version: require('../../package.json').version,
     platform: process.platform,
     host: require('os').hostname(),
     uptime: Math.round(process.uptime()),
-    adminUrl: '/admin',
-    adminProtected: auth.protected(),
     now: new Date().toISOString(),
   });
 });
@@ -273,11 +320,17 @@ router.get('/system/events', async (req, res) => {
   };
 
   const snapshot = await registry.state().catch(() => null);
+  const targets = await registry.targets().catch(() => ({ printers: [], default: null, reason: '' }));
   send('hello', {
     at: new Date().toISOString(),
     device,
     jobs: storage.list({ limit: 50, owner: device }).map(storage.summary),
     printer: slimPrinter(snapshot),
+    printers: targets.printers.map(p => ({
+      id: p.id, name: p.name, kind: p.kind, detail: p.detail,
+      status: p.status, recommended: Boolean(p.recommended || p.id === targets.default),
+    })),
+    defaultPrinter: targets.default,
     settings: {
       paper: config.get('paper'),
       copies: config.get('copies'),
@@ -308,6 +361,51 @@ router.get('/system/events', async (req, res) => {
     bus.off('job', onJob);
     bus.off('jobDeleted', onJobDeleted);
     bus.off('printer', onPrinter);
+  });
+});
+
+/* --------------------------------------------------------------- registry */
+
+/**
+ * Resolve a walk-up printer by its sticker code. The public sheet is what a
+ * guest standing in front of the machine should see: how to send the file and
+ * (for a shop) what it costs. The checkout that would pay for a shop job is
+ * completed by the job pipeline itself once the guest prints.
+ */
+router.get('/printers/:code', (req, res) => {
+  const printers = require('../services/printers');
+  const printer = printers.findByCode(req.params.code);
+  if (!printer) return res.status(404).json({ error: 'No printer has that code — read the sticker again' });
+  res.json({ printer: printers.publicSheet(printer) });
+});
+
+/** Read-only quote for a shop printer, keyed off the job's real page count. */
+router.get('/printers/:code/quote', (req, res) => {
+  const printers = require('../services/printers');
+  const printer = printers.findByCode(req.params.code);
+  if (!printer) return res.status(404).json({ error: 'No printer has that code — read the sticker again' });
+  const job = ownJob(req, res);
+  if (!job) return;
+  const sheet = printers.publicSheet(printer);
+  if (sheet.category !== 'shop' || !sheet.pricing) {
+    return res.json({ quote: null, note: 'This printer is not a paid shop — just print.' });
+  }
+  const pages = job.pageCount;
+  const currency = sheet.pricing.currency;
+  const color = Number(sheet.pricing.colorPerPage);
+  const mono = Number(sheet.pricing.monoPerPage);
+  const colorTotal = Math.round(pages * color * 100) / 100;
+  const monoTotal = Math.round(pages * mono * 100) / 100;
+  res.json({
+    quote: {
+      printerId: printer.id,
+      printerName: printer.name,
+      pages,
+      currency,
+      colour: { perPage: color, total: colorTotal },
+      mono: { perPage: mono, total: monoTotal },
+    },
+    note: 'Share the job on this printer — payment is settled by the printer at the counter.',
   });
 });
 

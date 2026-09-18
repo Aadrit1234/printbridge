@@ -23,6 +23,12 @@ module.exports = {
     return Boolean(await lpPath());
   },
 
+  /** Usable for one specific queue, when a job picked its own printer. */
+  async availableFor(queue) {
+    if (!isUnix || !queue) return false;
+    return Boolean(await lpPath());
+  },
+
   async enumerate() {
     if (!isUnix) return [];
     const res = await runFile('lpstat', ['-p', '-d'], { timeoutMs: 8000 });
@@ -32,8 +38,8 @@ module.exports = {
       .map(m => ({ id: m[1], name: m[1], kind: 'local', driver: 'CUPS', port: '', status: 'unknown' }));
   },
 
-  async state() {
-    const queue = config.get('cupsQueue');
+  async state(queueOverride) {
+    const queue = queueOverride || config.get('cupsQueue');
     if (!queue) return { backend: 'cups', status: 'unconfigured', name: 'No CUPS queue selected', detail: 'Choose a printer in the connection settings', queueDepth: 0, markers: [] };
     const res = await runFile('lpstat', ['-p', queue], { timeoutMs: 8000 });
     const text = `${res.stdout} ${res.stderr}`.toLowerCase();
@@ -42,7 +48,7 @@ module.exports = {
   },
 
   async print({ job, filePath, options = {} }) {
-    const queue = config.get('cupsQueue');
+    const queue = options.queue || config.get('cupsQueue');
     if (!queue) throw new Error('No CUPS queue selected');
     const lp = await lpPath();
     if (!lp) throw new Error('CUPS "lp" command not available');

@@ -12,7 +12,6 @@ const log = logger.make('api:system');
 const registry = require('../services/backends/registry');
 const queue = require('../services/queue');
 const render = require('../services/render');
-const remote = require('../services/remote');
 
 const router = express.Router();
 const VERSION = require('../../package.json').version;
@@ -27,6 +26,7 @@ router.get('/meta', (req, res) => {
     arch: process.arch,
     node: process.version,
     lanUrl: req.app.get('lanUrl'),
+    addresses: req.app.get('lanAddresses') || [],
     hostname: os.hostname(),
     serverTime: new Date().toISOString(),
     features: { batchUpload: true, sse: true, lazyPreviews: true, office: true },
@@ -40,34 +40,9 @@ router.patch('/settings', (req, res) => {
     const before = config.get('maxUploadMb');
     const all = config.patch(req.body || {});
     if (all.maxUploadMb !== before) log.info(`upload limit changed to ${all.maxUploadMb} MB`);
-    if (req.body && req.body.remoteUrl !== undefined) remote.invalidate();
     res.json(all);
   } catch (e) {
     res.status(400).json({ error: e.message });
-  }
-});
-
-/* ---------------- remote access ---------------- */
-
-/** Where this server can be reached from: LAN, VPN, and what to hand a phone. */
-router.get('/remote', async (req, res) => {
-  try {
-    res.json(await remote.snapshot({ fresh: req.query.fresh === '1' }));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-/** Actually try the remote address, so "it should work" becomes "it answered". */
-router.post('/remote/check', async (req, res) => {
-  try {
-    const url = (req.body && req.body.url) || null;
-    remote.invalidate();
-    const result = await remote.verify(url);
-    log.info(`remote check ${url || 'auto'}: ${result.ok ? 'reachable' : `failed (${result.error || result.status})`}`);
-    res.json({ ...result, snapshot: await remote.snapshot({ fresh: true }) });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
   }
 });
 
@@ -140,16 +115,11 @@ router.post('/storage/cleanup', async (req, res) => {
 
 /* ---------------- pairing ---------------- */
 
-async function pairingUrl(req) {
-  const requested = String(req.query.url || '');
-  // "remote" asks for the URL a device outside the house should use.
-  if (requested === 'remote') {
-    const snap = await remote.snapshot().catch(() => null);
-    if (snap && snap.url) return snap.url;
-  }
+function pairingUrl(req) {
   const lan = req.app.get('lanUrl');
   // Accept both ?url= (poster download) and ?data= (QR image cache-buster).
-  return String(requested || req.query.data || lan || `http://${req.headers.host}`);
+  // The QR points at the walk-up print app, not the marketing page.
+  return String(req.query.url || req.query.data || (lan ? `${lan}/print` : '') || `http://${req.headers.host}/print`);
 }
 
 router.get('/pairing/qr.png', async (req, res) => {
@@ -163,18 +133,13 @@ router.get('/pairing/qr.png', async (req, res) => {
   }
 });
 
-function pairingLines(req, { remote: isRemote = false } = {}) {
-  return isRemote
-    ? [
-      '1. Open the address above on any device that is on your private network.',
-      '2. Pick a file, check the preview, press Print.',
-      '3. It prints at home — nobody has to be there.',
-    ]
-    : [
-      '1. Join the Wi-Fi network this server is on.',
-      '2. Scan the QR code (or type the address above).',
-      '3. Pick a file, check the preview, press Print.',
-    ];
+function pairingLines() {
+  return [
+    '1. Join the Wi-Fi network this server is on.',
+    '2. Scan the QR code (or type the address above).',
+    '3. Pick a file, check the preview, press Print.',
+    '4. Keep the print code (PB-XXXX-XXXX) to follow it in the queue.',
+  ];
 }
 
 /** Download / preview the printable pairing card. */
@@ -182,8 +147,8 @@ router.get('/pairing/card.pdf', async (req, res) => {
   try {
     const pdfBytes = await render.qrCardPdf({
       title: config.get('appName'),
-      url: await pairingUrl(req),
-      lines: pairingLines(req, { remote: String(req.query.url || '') === 'remote' }),
+      url: pairingUrl(req),
+      lines: pairingLines(),
     });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="printbridge-qr-card.pdf"');
@@ -198,8 +163,8 @@ router.post('/pairing/card/print', async (req, res) => {
   try {
     const pdfBytes = await render.qrCardPdf({
       title: config.get('appName'),
-      url: await pairingUrl(req),
-      lines: pairingLines(req, { remote: String(req.query.url || '') === 'remote' }),
+      url: pairingUrl(req),
+      lines: pairingLines(),
     });
     const job = await queue.createFromPdf({ pdfBytes, name: 'PrintBridge QR card.pdf' });
     await queue.print(job.id, {});

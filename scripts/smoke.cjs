@@ -270,13 +270,53 @@ async function main() {
       step('job finished before cancel was possible (fine)');
     }
 
-    /* 6 — the guest stream carries our jobs and nothing else -------------- */
+    /* 6 — print codes and the printer picker ------------------------------ */
+    const target = (await get(`${GS}/printers`));
+    assert(Array.isArray(target.printers) && target.printers.length > 0, 'no printers offered to guests');
+    assert(target.printers.every(p => p.id && p.name), 'a printer is missing its id or name');
+    step(`printer picker: ${target.printers.map(p => `${p.name} (${p.kind})`).join(', ')}`);
+
+    // Send the same document to the outbox explicitly, by target id.
+    const outboxTarget = target.printers.find(p => p.id === 'outbox');
+    assert(outboxTarget, 'the outbox is not offered as a target');
+    const sent = await post(`${GS}/jobs/${imgJob.id}/print`, { target: 'outbox' }, { device: DEVICE_A });
+    assert(/^PB-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(sent.token || ''), `print code looks wrong: ${sent.token}`);
+    step(`print code issued: ${sent.token} → ${sent.target}`);
+
+    const done = await (async () => {
+      const until = Date.now() + 60000;
+      for (;;) {
+        const job = await get(`${GS}/jobs/${imgJob.id}`, { device: DEVICE_A });
+        if (['printed', 'failed'].includes(job.status)) return job;
+        if (Date.now() > until) throw new Error('timed out waiting for the targeted print');
+        await sleep(600);
+      }
+    })();
+    assert.strictEqual(done.status, 'printed', `targeted print failed: ${done.error}`);
+    const ticket = done.tickets.find(t => t.token === sent.token);
+    assert(ticket, 'the issued ticket is missing from the job');
+    assert.strictEqual(ticket.state, 'printed', `ticket should be printed, is ${ticket.state}`);
+    step(`ticket followed the job: ${ticket.token} → ${ticket.state} via ${ticket.backend}`);
+
+    const lookup = await get(`${GS}/tickets/${sent.token.replace(/-/g, '').toLowerCase()}`, { device: DEVICE_A });
+    assert.strictEqual(lookup.ticket.state, 'printed', 'token lookup returned the wrong state');
+    step('token lookup works, including when it is typed without dashes');
+
+    const foreign = await call(`${GS}/tickets/${sent.token}`, { device: DEVICE_B, raw: true });
+    assert.strictEqual(foreign.res.status, 404, 'another device could look up our print code');
+    step('print codes are scoped to the device that made them');
+
+    const badTarget = await call(`${GS}/jobs/${imgJob.id}/print`, { device: DEVICE_A, method: 'POST', body: { target: 'spooler:does-not-exist' }, raw: true });
+    assert(badTarget.res.status === 409, 'printing to an unavailable printer should be refused');
+    step('printing to an unavailable printer is refused with a clear error');
+
+    /* 7 — the guest stream carries our jobs and nothing else -------------- */
     assert(guest.seen.includes('hello'), 'guest SSE hello missing');
     assert(guest.seen.includes('job'), 'guest SSE job events missing');
     step(`guest SSE events: ${[...new Set(guest.seen)].join(', ')}`);
     assert(!guest.seen.includes('log'), 'guest stream must not carry server logs');
 
-    /* 7 — admin side ------------------------------------------------------- */
+    /* 8 — admin side ------------------------------------------------------- */
     if (adminCookie) {
       const all = await get(`${AS}/jobs?limit=50`, { admin: true });
       const ours = all.jobs.filter(j => created.includes(j.id));

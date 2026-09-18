@@ -8,6 +8,7 @@ dist/
 # Runtime data — uploads, generated PDFs, previews, the outbox, jobs and the
 # admin PIN hash. Never commit this: it is your documents and your secret.
 data/
+.tmp-testdata/
 
 # Local overrides and logs
 .env

@@ -1,22 +1,35 @@
-/* Home view — get a document into the pipeline. */
+/* Home — get a document in, and choose the printer it goes to.
+ *
+ * Three things live here, in the order a person needs them: the drop zone, the
+ * printer picker, and the last few prints with their codes. Nothing about the
+ * server, the queue or the control room is shown; the printer picker is the
+ * only "configuration" the person printing ever sees.
+ */
 
-import { api, adminUrl } from '../api.js';
-import { store } from '../store.js';
+import { api } from '../api.js';
+import { store, refreshPrinters } from '../store.js';
+import { chosenPrinter, setChosenPrinter } from '../prefs.js';
 import {
-  esc, icon, icons, toast, progressBar, jobRow,
-  fmtBytes, emptyState, note, ACTIVE_STATUSES,
+  esc, icon, icons, toast, fmtBytes, emptyState, note,
+  statusChip, printCode, tokenOf, ACTIVE_STATUSES, fmtAgo,
 } from '../ui.js';
 
-const SUGGESTED = ['A4', 'Letter', 'PDF', 'JPG', 'PNG', 'HEIC', 'TXT', 'DOCX'];
+const SUGGESTED = ['PDF', 'JPG', 'PNG', 'HEIC', 'TXT', 'DOCX', 'A4', 'Letter'];
 
-let local = { uploading: false, percent: 0, label: '', error: '' };
+let local = { uploading: false, files: [] };
 
 export async function render(container, _params, ctx) {
   container.innerHTML = shell();
   bind(container, ctx);
-  paintPrinterCard(container);
+  paintPrinters(container);
   paintRecent(container);
-  return { update: () => { paintPrinterCard(container); paintRecent(container); } };
+  return {
+    update(type) {
+      if (['printer', 'connection', 'hello', 'boot', 'resync', 'printers'].includes(type)) paintPrinters(container);
+      if (['job', 'jobDeleted', 'hello', 'boot', 'resync'].includes(type)) paintRecent(container);
+    },
+    destroy() { container._cleanup?.(); },
+  };
 }
 
 function shell() {
@@ -24,10 +37,8 @@ function shell() {
   <section class="view">
     <div class="view-head">
       <h1>Print something</h1>
-      <p>Upload from this device — the preview shows exactly what the printer will output.</p>
+      <p>Drop a file in, pick the printer, check the preview — then send it and keep the code it gives you.</p>
     </div>
-
-    <div class="card" id="printer-card"></div>
 
     <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose files to print">
       <input type="file" id="file-input" multiple hidden
@@ -36,129 +47,144 @@ function shell() {
       <div class="dropzone-inner">
         <div class="dropzone-icon">${icons.upload}</div>
         <h2>Drop files here</h2>
-        <p>Or tap to browse. Photos, PDFs, text files and Office documents all work — up to 12 at once.</p>
-        <div class="row" style="justify-content:center;flex-wrap:wrap">
-          <button class="btn primary" id="browse-btn">${icons.folder}<span>Choose files</span></button>
-          <button class="btn" id="photo-btn">${icons.camera}<span>Take a photo</span></button>
+        <p>Or tap to browse. Photos, PDFs, text and Office documents — up to 12 at once.</p>
+        <div class="row wrap" style="justify-content:center">
+          <button class="btn primary" id="browse-btn" type="button">${icons.folder}<span>Choose files</span></button>
+          <button class="btn" id="photo-btn" type="button">${icons.camera}<span>Take a photo</span></button>
         </div>
         <div class="type-chips">
           ${SUGGESTED.map(t => `<span class="chip kind">${esc(t)}</span>`).join('')}
         </div>
-        <p class="small muted">Tip: you can paste a screenshot or file with Ctrl / ${icon('command', 'kbd-icon')} + V</p>
+        <p class="small muted">Tip: you can paste a screenshot with ${icon('command', 'kbd-icon')} + V</p>
       </div>
     </div>
 
     <div class="card hidden" id="upload-card">
-      <div class="spread" style="margin-bottom:8px">
+      <div class="spread" style="margin-bottom:10px">
         <strong id="upload-label">Uploading…</strong>
         <span class="muted small" id="upload-percent">0%</span>
       </div>
-      ${progressBar(0, 'upload-progress')}
+      <div class="progress" id="upload-progress"><i style="width:0%"></i></div>
+      <div class="small muted" id="upload-note" style="margin-top:8px">Preparing the preview…</div>
     </div>
 
-    <div class="card hidden" id="upload-error"></div>
+    <div class="card hidden" id="upload-error" style="align-items:flex-start;gap:10px"></div>
+
+    <div class="card" id="printer-card">
+      <div class="card-head">
+        <h3>${icon('printer')} Where should it print?</h3>
+        <span class="grow"></span>
+        <button class="btn sm ghost" id="printer-refresh">${icons.refresh}<span>Check again</span></button>
+      </div>
+      <div id="printer-list"></div>
+    </div>
 
     <div class="card">
       <div class="card-head">
-        <h3>${icon('queue')} Recent activity</h3>
-        <a class="btn sm ghost" href="#/mine">My prints</a>
+        <h3>${icon('queue')} Recent prints</h3>
+        <span class="grow"></span>
+        <a class="btn sm ghost" href="#/history">${icons.list}<span>All my prints</span></a>
       </div>
       <div id="recent-list"></div>
     </div>
   </section>`;
 }
 
-/* ---------------- printer summary ---------------- */
+/* ---------------- printer picker ---------------- */
 
-function paintPrinterCard(container) {
-  const host = container.querySelector('#printer-card');
+function paintPrinters(container) {
+  const host = container.querySelector('#printer-list');
   if (!host) return;
-  const printer = store.state.printer;
 
-  if (!printer) {
-    host.innerHTML = `<div class="spread"><div class="muted small">Checking the printer…</div></div>`;
+  const printers = store.printerList();
+  const selected = store.preferredPrinter();
+
+  if (!printers.length) {
+    host.innerHTML = window.navigator.onLine
+      ? `${note('Looking for printers…', 'info')}`
+      : `${note('The print server is unreachable right now. Files you add will be kept for later.', 'warn')}`;
     return;
   }
 
-  const status = printer.state.status;
-  const meta = {
-    ready: { cls: 'printed', text: 'Ready' },
-    busy: { cls: 'printing', text: 'Printing' },
-    unconfigured: { cls: 'queued', text: 'Not selected' },
-    offline: { cls: 'failed', text: 'Offline' },
-    error: { cls: 'failed', text: 'Problem' },
-    unknown: { cls: 'canceled', text: 'Unknown' },
-  }[status] || { cls: 'canceled', text: status };
-
-  const kindIcon = printer.active.kind === 'usb' ? icons.usb : printer.active.kind === 'network' ? icons.wifi : icons.folder;
-  const outbox = printer.active.id === 'outbox';
+  const onlyOutbox = printers.length === 1 && printers[0].kind === 'outbox';
+  const icoFor = (p) => (p.kind === 'usb' ? icons.usb : p.kind === 'network' ? icons.wifi : p.kind === 'local' ? icons.printer : icons.folder);
+  const statusMeta = {
+    ready: { cls: 'printed', text: 'ready' },
+    busy: { cls: 'printing', text: 'printing now' },
+    error: { cls: 'failed', text: 'needs attention' },
+    offline: { cls: 'failed', text: 'offline' },
+    unknown: { cls: 'canceled', text: 'unknown' },
+    unconfigured: { cls: 'queued', text: 'not set up' },
+  };
 
   host.innerHTML = `
-    <div class="spread wrap">
-      <div class="row">
-        <div class="row" style="gap:10px">
-          <div class="empty-icon" style="width:44px;height:44px;margin:0;border-radius:14px">${kindIcon}</div>
-          <div>
-            <div class="row" style="gap:8px">
-              <strong>${esc(printer.state.name || printer.active.label)}</strong>
-              <span class="chip ${meta.cls}">${esc(meta.text)}</span>
-            </div>
-            <div class="muted small">${esc(printer.active.label)}${printer.state.queueDepth ? ` · ${printer.state.queueDepth} job(s) waiting` : ''}</div>
-          </div>
-        </div>
-      </div>
-      <a class="btn sm" href="${esc(adminUrl())}" data-admin-link>${icons.wrench}<span>Printer setup</span></a>
+    <div class="pick-list reveal">
+      ${printers.map((p) => {
+        const meta = statusMeta[p.status] || { cls: 'canceled', text: p.status || 'unknown' };
+        const isDefault = store.state.defaultPrinter === p.id;
+        return `
+        <button class="pick ${p.id === selected ? 'selected' : ''}" data-printer="${esc(p.id)}" type="button">
+          <span class="pick-ico">${icoFor(p)}</span>
+          <span class="pick-main">
+            <span class="pick-name">
+              ${esc(p.name)}
+              ${isDefault ? '<span class="chip live">default</span>' : ''}
+            </span>
+            <span class="pick-sub">${esc(p.detail || '')}</span>
+          </span>
+          <span class="chip ${meta.cls}">${esc(meta.text)}</span>
+        </button>`;
+      }).join('')}
     </div>
-    ${outbox ? `<div style="margin-top:12px">${note(`No printer is connected yet, so finished jobs are saved to the <b>outbox</b> folder. The owner can pick the USB queue in <a href="${esc(adminUrl())}" data-admin-link><b>Admin</b></a>.`, 'warn')}</div>` : ''}
-  `;
+    ${onlyOutbox ? `<div style="margin-top:12px">${note('No printer is connected to this server yet, so prints are saved as ready-to-print files instead of coming out on paper.', 'warn')}</div>` : ''}`;
+
+  host.querySelectorAll('[data-printer]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setChosenPrinter(btn.dataset.printer);
+      paintPrinters(container);
+      toast('Printer selected', btn.querySelector('.pick-name')?.textContent.trim() || '', 'ok', 1800);
+    });
+  });
 }
 
-/* ---------------- recent jobs ---------------- */
+/* ---------------- recent ---------------- */
 
 function paintRecent(container) {
   const host = container.querySelector('#recent-list');
   if (!host) return;
-  const jobs = store.jobList().slice(0, 5);
+  const jobs = store.jobList().slice(0, 3);
+
   if (!jobs.length) {
     host.innerHTML = emptyState({
       iconName: 'upload',
-      title: 'Nothing printed yet',
-      text: 'Upload a document and it will show up here with its status.',
+      title: 'Nothing yet',
+      text: 'Your prints show up here with their code and status.',
     });
     return;
   }
 
-  host.innerHTML = `<div class="job-list">${jobs.map(j => jobRow(j, { actions: actionsFor(j) })).join('')}</div>`;
-  bindRowActions(host);
-}
-
-function actionsFor(job) {
-  if (ACTIVE_STATUSES.includes(job.status)) {
-    return `<button class="btn sm ghost" data-act="cancel" data-id="${esc(job.id)}">Cancel</button>`;
-  }
-  const preview = `<a class="btn sm ghost" href="#/preview/${esc(job.id)}">Open</a>`;
-  if (job.status === 'failed') return `${preview}<button class="btn sm soft" data-act="retry" data-id="${esc(job.id)}">Retry</button>`;
-  if (job.status === 'printed') return `${preview}<button class="btn sm soft" data-act="print" data-id="${esc(job.id)}">Print again</button>`;
-  return `${preview}<button class="btn sm primary" data-act="print" data-id="${esc(job.id)}">Print</button>`;
-}
-
-function bindRowActions(host) {
-  host.querySelectorAll('[data-act]').forEach(btn => {
-    btn.addEventListener('click', async (event) => {
-      event.preventDefault();
-      const { act, id } = btn.dataset;
-      btn.disabled = true;
-      try {
-        if (act === 'print') { await api.print(id, {}); toast('Sent to the printer', 'Watch the queue for live status'); }
-        if (act === 'retry') { await api.retry(id); toast('Job queued again'); }
-        if (act === 'cancel') { await api.cancel(id); toast('Job canceled'); }
-      } catch (e) {
-        toast('Action failed', e.message, 'err');
-      } finally {
-        btn.disabled = false;
-      }
-    });
+  host.innerHTML = `<div class="job-list reveal">${jobs.map(job => miniRow(job)).join('')}</div>`;
+  host.querySelectorAll('[data-open]').forEach(el => {
+    el.addEventListener('click', () => { location.hash = `#/job/${el.dataset.open}`; });
   });
+}
+
+function miniRow(job) {
+  const code = tokenOf(job);
+  const active = ACTIVE_STATUSES.includes(job.status);
+  return `
+    <button class="job-row hoverable" data-open="${esc(job.id)}" type="button" style="text-align:left">
+      <span class="job-thumb">${icons.file}</span>
+      <span class="job-info">
+        <span class="job-title"><span class="job-name truncate">${esc(job.name)}</span></span>
+        <span class="job-meta">
+          <span>${job.pageCount ? `${job.pageCount} page${job.pageCount === 1 ? '' : 's'}` : 'preparing'}</span>
+          <span>${esc(fmtAgo(job.createdAt))}</span>
+        </span>
+        ${code ? `<span class="row" style="gap:8px">${printCode(code)}</span>` : ''}
+      </span>
+      <span class="job-side">${statusChip(job.status)}${active ? `<span class="small muted">${esc(job.phase || '')}</span>` : ''}</span>
+    </button>`;
 }
 
 /* ---------------- upload ---------------- */
@@ -167,8 +193,6 @@ function bind(container, ctx) {
   const dropzone = container.querySelector('#dropzone');
   const fileInput = container.querySelector('#file-input');
   const photoInput = container.querySelector('#photo-input');
-  const uploadCard = container.querySelector('#upload-card');
-  const errorCard = container.querySelector('#upload-error');
 
   const openPicker = () => fileInput.click();
   container.querySelector('#browse-btn').addEventListener('click', (e) => { e.stopPropagation(); openPicker(); });
@@ -188,43 +212,52 @@ function bind(container, ctx) {
   }));
   dropzone.addEventListener('drop', (e) => {
     const files = [...(e.dataTransfer?.files || [])];
-    if (files.length) runUpload(files, { container, uploadCard, errorCard }, ctx);
+    if (files.length) runUpload(files, container, ctx);
+  });
+
+  container.querySelector('#printer-refresh').addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    await refreshPrinters();
+    paintPrinters(container);
+    btn.disabled = false;
+    toast('Printer list refreshed', '', 'ok', 1600);
   });
 
   fileInput.addEventListener('change', () => {
     const files = [...fileInput.files];
-    if (files.length) runUpload(files, { container, uploadCard, errorCard }, ctx);
+    if (files.length) runUpload(files, container, ctx);
     fileInput.value = '';
   });
   photoInput.addEventListener('change', () => {
     const files = [...photoInput.files];
-    if (files.length) runUpload(files, { container, uploadCard, errorCard }, ctx);
+    if (files.length) runUpload(files, container, ctx);
     photoInput.value = '';
   });
 
-  // paste images/files straight from the clipboard
   const onPaste = (event) => {
     const items = [...(event.clipboardData?.items || [])];
     const files = items.map(i => (i.kind === 'file' ? i.getAsFile() : null)).filter(Boolean);
-    if (files.length) {
-      files.forEach((f, i) => { if (!f.name) files[i] = new File([f], `pasted-${Date.now()}.png`, { type: f.type }); });
-      runUpload(files, { container, uploadCard, errorCard }, ctx);
-    }
+    if (!files.length) return;
+    files.forEach((f, i) => { if (!f.name) files[i] = new File([f], `pasted-${Date.now()}.png`, { type: f.type }); });
+    runUpload(files, container, ctx);
   };
   window.addEventListener('paste', onPaste);
-
   container._cleanup = () => window.removeEventListener('paste', onPaste);
 }
 
-async function runUpload(files, { container, uploadCard, errorCard }, ctx) {
+async function runUpload(files, container, ctx) {
   if (local.uploading) return;
   local.uploading = true;
-  errorCard.classList.add('hidden');
-  uploadCard.classList.remove('hidden');
 
+  const card = container.querySelector('#upload-card');
+  const errorCard = container.querySelector('#upload-error');
   const label = container.querySelector('#upload-label');
   const percent = container.querySelector('#upload-percent');
-  const bar = container.querySelector('.upload-progress > i');
+  const bar = container.querySelector('#upload-progress > i');
+
+  errorCard.classList.add('hidden');
+  card.classList.remove('hidden');
 
   const totalBytes = files.reduce((sum, f) => sum + (f.size || 0), 0);
   label.textContent = files.length === 1
@@ -234,7 +267,7 @@ async function runUpload(files, { container, uploadCard, errorCard }, ctx) {
   try {
     const result = await api.upload(files, {
       onProgress: (p) => {
-        const pct = Math.round(p * 78);
+        const pct = Math.round(p * 80);
         percent.textContent = `${pct}%`;
         bar.style.width = `${pct}%`;
       },
@@ -242,29 +275,22 @@ async function runUpload(files, { container, uploadCard, errorCard }, ctx) {
 
     percent.textContent = '100%';
     bar.style.width = '100%';
-
     for (const job of result.jobs) store.upsertJob(job);
     for (const err of result.errors || []) toast('Skipped a file', `${err.name}: ${err.error}`, 'err', 6000);
-
     if (!result.jobs.length) throw new Error('No files could be accepted');
 
     toast(
       result.jobs.length === 1 ? 'File added' : `${result.jobs.length} files added`,
-      'Preparing the print preview…',
-      'ok'
+      'Building the preview…',
+      'ok', 2600,
     );
-    ctx.navigate(`#/preview/${result.jobs[0].id}`);
+    ctx.navigate(`#/job/${result.jobs[0].id}`);
   } catch (e) {
     errorCard.classList.remove('hidden');
     errorCard.innerHTML = `${icons.alert}<div><strong>Upload failed</strong><div class="muted small" style="margin-top:4px">${esc(e.message)}</div></div>`;
-    errorCard.style.display = 'flex';
     toast('Upload failed', e.message, 'err');
   } finally {
     local.uploading = false;
-    setTimeout(() => uploadCard.classList.add('hidden'), 500);
+    setTimeout(() => card.classList.add('hidden'), 600);
   }
-}
-
-export function destroy(container) {
-  container._cleanup?.();
 }

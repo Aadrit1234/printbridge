@@ -1,4 +1,8 @@
-/* Queue view — live status of everything in flight and in history. */
+/* Queue view — every document in flight and in history, by device.
+ *
+ * Each row carries the print code it was given, so a person reading a code
+ * aloud can be answered straight from here. The code-by-code view lives in
+ * Print codes. */
 
 import { api } from '../api.js';
 import { store } from '../store.js';
@@ -116,7 +120,7 @@ function paint(container, ctx) {
       iconName: 'queue',
       title: filter === 'all' ? 'The queue is empty' : 'Nothing matches this filter',
       text: filter === 'all' ? 'Upload a document and it will appear here with live progress.' : 'Try a different filter.',
-      action: '<a class="btn primary" href="#/print">Print something</a>',
+      action: '<a class="btn primary" href="#/codes">See print codes</a>',
     });
   } else {
     list.innerHTML = groupByDay(jobs);
@@ -177,7 +181,6 @@ function actionsFor(job) {
   if (active) {
     buttons.push(`<button class="btn sm ghost" data-act="cancel" data-id="${esc(job.id)}">Cancel</button>`);
   } else {
-    buttons.push(`<a class="btn sm ghost" href="#/preview/${esc(job.id)}">Open</a>`);
     if (job.status === 'failed') buttons.push(`<button class="btn sm soft" data-act="retry" data-id="${esc(job.id)}">${icons.retry}</button>`);
     if (job.status === 'printed' || job.status === 'canceled') buttons.push(`<button class="btn sm soft" data-act="print" data-id="${esc(job.id)}">${icons.play}</button>`);
     buttons.push(`<button class="btn sm ghost" data-act="delete" data-id="${esc(job.id)}">${icons.trash}</button>`);

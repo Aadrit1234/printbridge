@@ -103,12 +103,13 @@ router.post('/sessions/close-all', (req, res) => {
 router.use('/jobs', require('./jobs'));
 router.use('/files', require('./files'));
 router.use('/printer', require('./printer'));
+router.use('/printers', require('./printers'));
 router.use('/system', require('./system'));
 
 /* One extra admin convenience: the exact URL to hand out to guests. */
 router.get('/guest-link', (req, res) => {
   const lan = req.app.get('lanUrl') || `http://${req.headers.host}`;
-  res.json({ url: lan, adminUrl: `${lan}/admin` });
+  res.json({ url: `${lan}/print`, adminUrl: `${lan}/admin` });
 });
 
 module.exports = router;

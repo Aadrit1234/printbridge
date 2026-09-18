@@ -8,6 +8,7 @@
 
 import { api, API_ORIGIN } from './api.js';
 import { deviceId } from './device.js';
+import { chosenPrinter } from './prefs.js';
 
 const listeners = new Set();
 
@@ -17,6 +18,8 @@ export const store = {
     meta: null,
     settings: null,
     printer: null,
+    printers: [],           // what this device may print to
+    defaultPrinter: null,   // the house default, when the server has one
     jobs: new Map(),
     connection: 'connecting', // connecting | live | offline
     lastEventAt: null,
@@ -45,6 +48,26 @@ export const store = {
 
   jobsByBatch(batchId) {
     return store.jobList().filter(j => j.batchId === batchId);
+  },
+
+  /** Printers that can take a job right now, best first. */
+  printerList() {
+    const list = store.state.printers || [];
+    return [...list].sort((a, b) => Number(b.recommended) - Number(a.recommended));
+  },
+
+  /** The printer a print command should go to unless the person says otherwise. */
+  preferredPrinter() {
+    const chosen = chosenPrinter();
+    if (chosen && store.state.printers.some(p => p.id === chosen)) return chosen;
+    const recommended = store.printerList().find(p => p.recommended);
+    const first = store.state.printers[0];
+    return recommended ? recommended.id : (first ? first.id : null);
+  },
+
+  /** Jobs that have a print code, newest first. */
+  codedJobs() {
+    return store.jobList().filter(j => j.token);
   },
 
   upsertJob(job) {
@@ -77,13 +100,14 @@ function toPrinterState(summary) {
 
 export async function bootstrap() {
   try {
-    const [meta, settings, printer, jobs] = await Promise.all([
-      api.meta(), api.settings(), api.printerStatus(), api.jobs(100),
+    const [meta, settings, printer, jobs, printers] = await Promise.all([
+      api.meta(), api.settings(), api.printerStatus(), api.jobs(100), api.printers().catch(() => null),
     ]);
     store.state.meta = meta;
     store.state.settings = settings;
     store.state.printer = toPrinterState(printer.printer);
     for (const job of jobs.jobs) store.upsertJob(job);
+    if (printers) applyPrinters(printers);
     store.state.ready = true;
     store.emit('boot');
   } catch (e) {
@@ -91,6 +115,22 @@ export async function bootstrap() {
     store.emit('error', e);
   }
   connectEvents();
+}
+
+/** Keep the printer list in one shape wherever it arrives from. */
+function applyPrinters(payload) {
+  if (!payload) return;
+  if (Array.isArray(payload.printers)) store.state.printers = payload.printers;
+  store.state.defaultPrinter = payload.default || null;
+  store.state.printerReason = payload.reason || '';
+  store.emit('printers');
+}
+
+/** Re-ask for the printer list (used by the picker's refresh button). */
+export async function refreshPrinters() {
+  const payload = await api.printers().catch(() => null);
+  applyPrinters(payload);
+  return store.state.printers;
 }
 
 export function refreshPrinter() {
@@ -126,6 +166,11 @@ function connectEvents() {
       for (const job of data.jobs) store.upsertJob(job);
     }
     if (data.printer) store.state.printer = toPrinterState(data.printer);
+    if (data.printers) {
+      store.state.printers = data.printers;
+      store.state.defaultPrinter = data.defaultPrinter || null;
+      store.emit('printers');
+    }
     if (data.settings) store.state.settings = { ...store.state.settings, ...data.settings };
     store.state.connection = 'live';
     store.emit('hello');

@@ -2,11 +2,14 @@
 
 A self-hosted print server with two front doors:
 
-- **Guest page — `/`** — scan the QR code, upload a file, see exactly how it will
-  print, press *Print*. No app, no account, no PIN. Guests only ever see their
-  own jobs.
+- **Guest page — `/`** — scan the QR code, upload a file, pick the printer, see
+  exactly how it will print, press *Print*. No app, no account, no PIN, and
+  **no admin link anywhere on it**: guests see their own jobs and nothing else.
+- **Print code — `#/code`** — every print command gets its own code
+  (`PB-7K4Q-2M9D`). The sender follows it from *queued* → *printing* → *printed*.
 - **Admin — `/admin`** — the control room, behind a PIN: the printer's connection,
-  every job from every device, print defaults, storage, diagnostics and access.
+  every job from every device, every print code, defaults, storage and access.
+  It lives on the machine running the server; the guest page cannot reach it.
 
 Built for the **HP Neverstop Laser MFP 1200w**, and it works two ways:
 
@@ -44,8 +47,13 @@ The console prints everything you need:
 2. If no silent-print engine is found, press **Install** — PrintBridge fetches
    SumatraPDF via `winget`, with a portable-download fallback. Adobe Acrobat or
    Reader is detected and used instead if you already have it.
-3. **Print test page.** Then tape the QR card (Admin → Access) next to the
-   printer. Anyone who scans it can print; nobody can change anything.
+3. **Print test page.** Then tape the QR card (Admin → **Settings** → *Share this
+   printer* → *Print QR card now*) next to the printer. Anyone who scans it can
+   print and gets a code for whatever they send; nobody can change anything.
+
+> Setting this up on the machine that owns the printer, step by step — USB
+> first, then flipping it to Wi-Fi, then autostart? **`INSTRUCTIONS.md`** is
+> written for exactly that and is the fastest path to a first real page.
 
 ### Make it truly always-on
 
@@ -119,7 +127,7 @@ its own scripts, and the service worker refuses to cache anything under it.
 
 ```
 guest ──HTTP──▶ PrintBridge ──▶ print path ──▶ HP Neverstop 1200w
- (anywhere)     (always-on box)      │
+(on your Wi-Fi) (always-on box)      │
                                      ├─ spooler (USB queue, SumatraPDF/Adobe)
                                      ├─ ipp    (network, application/pdf)
                                      ├─ cups   (macOS/Linux driver queue)
@@ -217,28 +225,36 @@ POST   /sessions/close-all    sign out everywhere
 
 ---
 
-## Printing from anywhere (outside your Wi-Fi)
+## Print codes
 
-The QR/LAN flow covers everyone at home. For true remote printing, put the server
-on a private mesh instead of the open internet — **Tailscale** is the easy route
-(free for personal use): install it on the always-on box and on your phone, sign
-in to both, and reach `http://<tailnet-name>:8088`. Admin → **Settings** →
-**Print from anywhere** detects the Tailscale address, tests it, and prints a QR
-card for it. `tailscale serve --bg 8088` gives you a real HTTPS address on top.
+A **print code** is issued every time somebody presses *Print* — not once per
+document. It is short enough to read out loud (`PB-RDY5-7XU5`, no `0`/`O`/`1`/`I`
+so it cannot be misheard), unique across the whole server, and its state tracks
+that one print command:
 
-**The full walkthrough — Wi-Fi printer setup, autostart at boot, Tailscale, and
-how jobs sent from far away print with nobody there — is in
-[docs/anywhere-access.md](docs/anywhere-access.md).** If you must expose a public
-URL, use Cloudflare Tunnel with an Access policy (also covered there) rather than
-a router port-forward.
+| State | Meaning |
+|---|---|
+| `queued` | accepted, waiting for its turn |
+| `waiting` | the printer is asleep or off — still trying |
+| `printing` | handed to the printer |
+| `printed` | done |
+| `failed` / `canceled` | gave up, or the sender stopped it |
+
+The sender sees it on the job screen and on `#/code`, where they can type any old
+code back in later. The admin sees the same code in **Admin → Print codes** (and
+inline in the queue) with its live state, who sent it and where it went. Printing
+the same document again opens a *new* code — the old one keeps its own history.
+
+Codes are scoped to the device that made them: one phone cannot look up another
+phone's code, and the guest API returns 404 for it.
 
 ### Printing nobody has to babysit
 
 Every job wakes the network printer first, and if the printer is unreachable the
 job does **not** fail: it becomes *Waiting for printer*, retries with a growing
-backoff (5 s → 2 min) for a configurable window (default 30 min), and fires the
-moment the printer answers again. A server restart does not lose those jobs. Set
-the window in Admin → Settings → *Print from anywhere*.
+backoff (5 s → 2 min) for a configurable window, and fires the moment the printer
+answers again. A server restart does not lose those jobs. Set the window in
+Admin → Settings → **Network & unattended printing**.
 
 Prove the Wi-Fi path without touching a printer:
 
@@ -247,31 +263,37 @@ npm run fake-printer                          # a simulated IPP printer
 ADMIN_PIN=<pin> npm run smoke:ipp             # end-to-end test: print, fallback, resume
 ```
 
+### Reaching it from outside your Wi-Fi
+
+There is deliberately **no remote/tunnel feature** in this build. PrintBridge is
+meant to serve the network the printer is on: the QR card points at a LAN
+address, and nothing is exposed to the internet. If you ever do want it reachable
+from outside, put the *whole thing* behind your own VPN or an authenticating
+proxy — the app will not help you publish itself, and the guest page (which can
+print) should never be on a public URL without one.
+
 ---
 
 ## Deploying
 
-The frontend is plain ES modules, so it runs anywhere static; the backend must
-run on a machine that can reach the printer (a cloud function cannot reach a home
-LAN printer, and Vercel caps request bodies at 4.5 MB).
+The normal deployment is the simplest one: the server **is** the site. It serves
+the guest page, the API and the admin console from one origin on your LAN, with
+nothing to configure, no CORS, and no third party in the loop.
 
 ```bash
-# backend, live on your always-on box, published through Tailscale Funnel
-tailscale funnel 8088                       # → https://<machine>.<tailnet>.ts.net
-ALLOWED_ORIGINS=https://printbridge.vercel.app node server.js
-
-# frontend, live on Vercel
-PRINTBRIDGE_API_URL=https://<machine>.<tailnet>.ts.net npm run build:web
-vercel --prod
+npm install && npm start        # guests: http://<machine-ip>:8088
 ```
 
-Step-by-step, including the GitHub push, autostart, the Vercel project settings
-and the cookie rules that make the admin console work from another origin:
+There is also a static-bundle path (`npm run build:web`) that publishes the
+**guest site only** — `public/admin/` is deliberately excluded, so a static host
+ever serves the control room — for the case where you put the backend behind real
+HTTPS. It cannot work against a plain-`http` LAN backend, because an `https` page
+may not call it. Details, the GitHub push and the cookie rules: 
 **[docs/deploy.md](docs/deploy.md)**.
 
-> Cross-origin HTTPS is required for the *admin* console (it uses a session
-> cookie). If Safari/Firefox third-party cookie blocking gets in the way, the
-> deploy guide shows the one-line Vercel rewrite that keeps it same-origin.
+> A cloud function cannot reach a printer on your home LAN, and Vercel caps
+> request bodies at 4.5 MB — which is why the backend belongs on the machine
+> that can see the printer.
 
 ## Troubleshooting
 

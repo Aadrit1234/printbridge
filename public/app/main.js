@@ -1,29 +1,30 @@
-/* App controller — routing, theme, live status, PWA. */
+/* Guest app controller — routes, live status, theme, PWA.
+ *
+ * This bundle is the whole public surface: print something, follow its code,
+ * read your own history. There is intentionally no admin route, no admin link
+ * and no admin code in here — a phone that opens this page cannot even find
+ * the control room.
+ */
 
-import { api, adminUrl } from './api.js';
+import { api } from './api.js';
 import { bootstrap, store } from './store.js';
-import { applyTheme, currentTheme, systemTheme, toggleTheme } from './theme.js';
+import { applyTheme, currentTheme, toggleTheme } from './theme.js';
 import { esc, icons, setThumbUrlBuilder, toast } from './ui.js';
 
 // Thumbnails need the device id, which only this client knows how to attach.
 setThumbUrlBuilder(api.thumbUrl);
 
-/* Point every "Admin" link at wherever the admin console actually lives: this
- * origin when the backend serves the app, the backend's URL when this frontend
- * is deployed to a static host. */
-for (const link of document.querySelectorAll('[data-admin-link]')) link.href = adminUrl();
-
 import * as printView from './views/print.js';
-import * as previewView from './views/preview.js';
-import * as mineView from './views/mine.js';
+import * as jobView from './views/job.js';
+import * as historyView from './views/history.js';
+import * as codeView from './views/code.js';
 
-/* The guest app has exactly three screens. Printer setup, defaults, storage,
- * diagnostics and everybody else's jobs live in the admin app at /admin —
- * a phone that scanned the QR code never downloads or reaches them. */
 const routes = [
   { match: /^#\/print\/?$/, view: printView, name: 'print', title: 'Print' },
-  { match: /^#\/preview\/([\w-]+)$/, view: previewView, name: 'preview', title: 'Preview', params: (m) => ({ id: m[1] }) },
-  { match: /^#\/mine\/?$/, view: mineView, name: 'mine', title: 'My prints' },
+  { match: /^#\/job\/([\w-]+)$/, view: jobView, name: 'job', title: 'Your print', nav: 'print', params: m => ({ id: m[1] }) },
+  { match: /^#\/history\/?$/, view: historyView, name: 'history', title: 'My prints' },
+  { match: /^#\/code\/?$/, view: codeView, name: 'code', title: 'Print code' },
+  { match: /^#\/code\/([0-9A-Za-z-]+)$/, view: codeView, name: 'code', title: 'Print code', params: m => ({ token: m[1] }) },
 ];
 
 const viewHost = document.getElementById('view');
@@ -38,19 +39,19 @@ function resolveRoute() {
   return { route: routes[0], params: {} };
 }
 
+export async function navigate(hash, { replace = false } = {}) {
+  if (replace) location.replace(hash);
+  else location.hash = hash;
+}
+
 function syncNav(name) {
-  const activeName = name === 'preview' ? 'print' : name;
+  const active = name === 'job' ? 'print' : name;
   for (const link of document.querySelectorAll('[data-route]')) {
-    link.classList.toggle('active', link.dataset.route === activeName);
+    link.classList.toggle('active', link.dataset.route === active);
   }
   const title = document.getElementById('topbar-title');
   const resolved = routes.find(r => r.name === name);
   if (title && resolved) title.textContent = resolved.title;
-}
-
-export async function navigate(hash, { replace = false } = {}) {
-  if (replace) location.replace(hash);
-  else location.hash = hash;
 }
 
 async function render() {
@@ -60,15 +61,11 @@ async function render() {
     try { current.destroy(); } catch (e) { console.error('view teardown failed', e); }
   }
   current = null;
-
   syncNav(route.name);
 
-  // Each view renders into its own layer and keeps that layer forever, so a
-  // view that is still awaiting data (or repainting from a button handler)
-  // when the user navigates away paints into its own subtree instead of
-  // crashing on markup that was cleared out from under it. Outgoing layers are
-  // hidden right away (so nothing flashes double) and dropped once the new
-  // view has painted.
+  // Each view paints into its own layer and keeps it forever, so a view that is
+  // still awaiting data when the user navigates away cannot crash on markup
+  // that was cleared underneath it. Outgoing layers hide at once, then drop.
   for (const stale of Array.from(viewHost.children)) stale.hidden = true;
 
   const layer = document.createElement('div');
@@ -83,6 +80,7 @@ async function render() {
 
   current = { name: route.name, handle, params };
   if (handle && handle.update) handle.update('mount');
+  viewHost.scrollTop = 0;
 }
 
 window.addEventListener('hashchange', render);
@@ -91,11 +89,9 @@ window.addEventListener('hashchange', render);
 
 function handleThemeToggle() {
   const next = toggleTheme();
-  toast(`Switched to ${next} theme`, '', 'info', 2000);
+  toast(`Switched to ${next} theme`, '', 'info', 1800);
   store.emit('theme');
 }
-
-export { applyTheme, currentTheme };
 
 document.getElementById('btn-theme')?.addEventListener('click', handleThemeToggle);
 document.getElementById('btn-theme-mobile')?.addEventListener('click', handleThemeToggle);
@@ -111,7 +107,7 @@ function paintStatus() {
   const connection = store.state.connection;
   const dot = document.getElementById('status-dot');
   const text = document.getElementById('status-text');
-  const side = document.getElementById('sidebar-printer');
+  const rail = document.getElementById('rail-printer');
 
   const status = printer && printer.state ? printer.state.status : 'unknown';
   if (dot) dot.className = `dot ${connection === 'live' ? status : 'offline'}`;
@@ -126,8 +122,8 @@ function paintStatus() {
   else label = status;
 
   if (text) text.textContent = label;
-  if (side) {
-    side.textContent = printer
+  if (rail) {
+    rail.textContent = printer
       ? `printer: ${printer.state.name || printer.active.id} · ${status}`
       : 'printer: connecting…';
   }
@@ -139,9 +135,6 @@ function paintBadges() {
   const badge = document.getElementById('nav-badge-mine');
   if (!badge) return;
   badge.hidden = !(active || failed);
-  // Active jobs: the count. Failures: the Lucide alert icon plus the count, so
-  // the state reads as an icon rather than a punctuation mark. A healthy queue
-  // shows nothing at all.
   badge.classList.toggle('hot', Boolean(active));
   badge.classList.toggle('fail', !active && Boolean(failed));
   if (active) badge.textContent = String(active);
@@ -177,11 +170,11 @@ installBtn?.addEventListener('click', async () => {
   installBtn.hidden = true;
 });
 
-window.addEventListener('appinstalled', () => { installBtn && (installBtn.hidden = true); });
+window.addEventListener('appinstalled', () => { if (installBtn) installBtn.hidden = true; });
 
-/* PWA shell. The service worker is update-safe: when a redeployed server
- * activates a new version, this page reloads itself exactly once so nobody
- * ever runs a mix of old HTML and new modules. */
+/* The service worker is update-safe: when a redeployed server activates a new
+ * version, the page reloads itself exactly once so nobody runs a mix of old
+ * HTML and new modules. */
 if ('serviceWorker' in navigator) {
   const hadController = Boolean(navigator.serviceWorker.controller);
   let reloading = false;
@@ -199,7 +192,6 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
       .then((reg) => {
         reg.update().catch(() => undefined);
-        // Long-lived displays (a wall tablet) pick up deploys without a manual refresh.
         setInterval(() => reg.update().catch(() => undefined), 30 * 60 * 1000);
       })
       .catch((e) => console.warn('service worker failed', e));
@@ -218,7 +210,7 @@ bootstrap().then(() => {
   if (current && current.handle) current.handle.update('boot');
 });
 
-window.addEventListener('online', () => toast('Back online', '', 'ok', 2000));
+window.addEventListener('online', () => toast('Back online', '', 'ok', 1800));
 window.addEventListener('offline', () => toast('Connection lost', 'The server is unreachable', 'err'));
 
 window.addEventListener('unhandledrejection', (event) => {

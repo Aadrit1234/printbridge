@@ -28,6 +28,7 @@ class Storage {
       previews: path.join(dataDir, 'previews'),
       thumbs: path.join(dataDir, 'thumbs'),
       outbox: path.join(dataDir, 'outbox'),
+      print: path.join(dataDir, 'print'),
     };
     for (const dir of Object.values(this.dirs)) fs.mkdirSync(dir, { recursive: true });
     this.jobsFile = path.join(dataDir, 'jobs.json');
@@ -99,6 +100,14 @@ class Storage {
   previewPattern(job) { return `${job.id}_p`; }
   thumbPath(job) { return path.join(this.dirs.thumbs, `${job.id}.png`); }
 
+  /** The print copy: the token page merged in front of the job, what actually prints. */
+  printCopyPath(job) { return path.join(this.dirs.print, `${job.id}.pdf`); }
+
+  async purgePrintCopy(job) {
+    await fsp.unlink(this.printCopyPath(job)).catch(() => {});
+    if (job.printCopy) { job.printCopy = null; this._scheduleSave(); }
+  }
+
   async jobFileBytes(job) {
     const file = job.kind === 'pdf' && job.storage.pdf ? this.pdfPath(job) : this.pdfPath(job);
     return fsp.readFile(file);
@@ -140,15 +149,27 @@ class Storage {
       this.jobs.delete(job.id);
       purged++;
     }
+    await this.sweepPrintCopies([...this.jobs.keys()]);
     if (purged) { this._scheduleSave(); log.info(`cleaned up ${purged} old job(s)`); }
     return purged;
   }
 
   async purgeFiles(job) {
-    const targets = [this.pdfPath(job), this.thumbPath(job)];
+    const targets = [this.pdfPath(job), this.thumbPath(job), this.printCopyPath(job)];
     for (let p = 1; p <= (job.renderedPages || 0) + 5; p++) targets.push(this.previewPath(job, p));
     for (const ext of ['', job.ext || '.pdf']) targets.push(path.join(this.dirs.uploads, `${job.id}${ext}`));
     await Promise.allSettled(targets.map(f => fsp.unlink(f).catch(() => {})));
+  }
+
+  /** Remove print copies left over by jobs that no longer exist. */
+  async sweepPrintCopies(jobIds) {
+    const keep = new Set(jobIds);
+    try {
+      for (const entry of await fsp.readdir(this.dirs.print)) {
+        const id = entry.replace(/\.pdf$/, '');
+        if (!keep.has(id)) await fsp.unlink(path.join(this.dirs.print, entry)).catch(() => {});
+      }
+    } catch { /* no dir yet */ }
   }
 
   async usage() {
@@ -194,6 +215,12 @@ function summary(job) {
     owner: job.owner || null,
     attempts: job.attempts || 0,
     nextAttemptAt: job.nextAttemptAt || null,
+    target: job.target || null,
+    token: job.token || null,
+    tickets: Array.isArray(job.tickets) ? job.tickets : [],
+    payment: job.payment || null,
+    superseded: Boolean(job.superseded),
+    combined: Boolean(job.combined),
     system: Boolean(job.system),
     hasPdf: Boolean(job.hasPdf),
     hasOriginal: Boolean(job.hasOriginal),

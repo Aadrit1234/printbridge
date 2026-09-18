@@ -13,6 +13,7 @@ import { esc, icons, setThumbUrlBuilder, toast } from '../app/ui.js';
 setThumbUrlBuilder(api.thumbUrl);
 
 import * as queueView from './views/queue.js';
+import * as codesView from './views/codes.js';
 import * as printerView from './views/printer.js';
 import * as settingsView from './views/settings.js';
 import * as accessView from './views/access.js';
@@ -20,6 +21,7 @@ import * as accessView from './views/access.js';
 const viewHost = document.getElementById('view');
 const routes = [
   { match: /^#\/queue\/?$/, view: queueView, name: 'queue', title: 'Queue' },
+  { match: /^#\/codes\/?$/, view: codesView, name: 'codes', title: 'Print codes' },
   { match: /^#\/printer\/?$/, view: printerView, name: 'printer', title: 'Printer' },
   { match: /^#\/settings\/?$/, view: settingsView, name: 'settings', title: 'Settings' },
   { match: /^#\/access\/?$/, view: accessView, name: 'access', title: 'Access' },
@@ -245,14 +247,25 @@ function paintStatus() {
 function paintBadges() {
   const active = store.activeJobs().length;
   const failed = store.jobList().filter(j => j.status === 'failed').length;
-  const badge = document.getElementById('nav-badge-queue');
-  if (!badge) return;
-  badge.hidden = !(active || failed);
-  badge.classList.toggle('hot', Boolean(active));
-  badge.classList.toggle('fail', !active && Boolean(failed));
-  if (active) badge.textContent = String(active);
-  else if (failed) badge.innerHTML = `${icons.alert}<span>${failed}</span>`;
-  else badge.textContent = '';
+
+  const queue = document.getElementById('nav-badge-queue');
+  if (queue) {
+    queue.hidden = !(active || failed);
+    queue.classList.toggle('hot', Boolean(active));
+    queue.classList.toggle('fail', !active && Boolean(failed));
+    if (active) queue.textContent = String(active);
+    else if (failed) queue.innerHTML = `${icons.alert}<span>${failed}</span>`;
+    else queue.textContent = '';
+  }
+
+  // Live print commands: the count is the number of codes still moving.
+  const moving = store.jobList().filter(j => ['queued', 'waiting', 'printing'].includes(j.status)).length;
+  const codes = document.getElementById('nav-badge-codes');
+  if (codes) {
+    codes.hidden = !moving;
+    codes.classList.toggle('hot', Boolean(moving));
+    codes.textContent = moving ? String(moving) : '';
+  }
 }
 
 store.subscribe((type) => {

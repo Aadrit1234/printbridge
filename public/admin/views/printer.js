@@ -108,7 +108,7 @@ function shell() {
             <div class="step-item"><b>Print the network report</b> from the printer to note the IP address it receives.</div>
             <div class="step-item"><b>Come back here</b> → <b>Network</b> tab → press <b>Find printers</b>, or paste the printer's IP (just <span class="mono">192.168.1.50</span> is enough). Jobs then print over IPP.</div>
             <div class="step-item"><b>Reserve the IP</b> in your router (DHCP reservation) so the address never changes.</div>
-            <div class="step-item"><b>Then print from anywhere</b> — Admin → <b>Settings</b> → <b>Print from anywhere</b> walks through the free VPN that lets your phone reach this server from outside the house.</div>
+            <div class="step-item"><b>Keep it awake.</b> Wi-Fi printers sleep; set the keep-alive interval below or in <b>Settings → Network</b>, and jobs that arrive while it dozes off are held and sent again automatically.</div>
           </div>
           <div style="margin-top:12px">${note('While the printer is on <b>USB</b>, the machine running PrintBridge must stay connected to it by cable — that is a hardware limit, not a software one. Switching to Wi-Fi frees the printer completely.', 'warn')}</div>
         </div>

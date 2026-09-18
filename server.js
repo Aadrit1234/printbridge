@@ -59,14 +59,14 @@ function banner(baseUrl, extra) {
       '',
       `  Local     http://localhost:${PORT}`,
       ...extra.addresses.map(a => `  Network   ${a}`),
-      ...(extra.remote ? [`  ${extra.remote.label.padEnd(9)} ${extra.remote.url}   (use this away from home)`] : []),
       '',
       '  Guests scan this to print (no app, no account):',
       '',
       qr.split('\n').filter(Boolean).map(l => '  ' + l).join('\n'),
       '',
-      `  Guest app    ${baseUrl}`,
+      `  Print app    ${baseUrl}/print`,
       `  Admin app    ${extra.admin.url}`,
+      `  Corporate    ${baseUrl}`,
       extra.admin.pin
         ? `  Admin PIN    ${extra.admin.pin}    (first run — change it in Admin → Access)`
         : '  Admin PIN    as you set it (Admin → Access to change)',
@@ -94,11 +94,11 @@ async function main() {
   config.init(DATA_DIR);
   storage.init(DATA_DIR);
   auth.init(DATA_DIR);
+  require('./src/services/printers').init(DATA_DIR);
   logger.setLevel(process.env.LOG_LEVEL || 'info');
 
   const watchdog = require('./src/services/watchdog');
   const registry = require('./src/services/backends/registry');
-  const remote = require('./src/services/remote');
   const { createApp } = require('./src/app');
 
   const log = logger.make('server');
@@ -107,19 +107,15 @@ async function main() {
   const addresses = lanAddresses().map(ip => `http://${ip}:${PORT}`);
   const lanUrl = addresses[0] || `http://localhost:${PORT}`;
 
-  const app = createApp({ publicDir: path.join(__dirname, 'public'), lanUrl });
+  const app = createApp({ publicDir: path.join(__dirname, 'public'), lanUrl, lanAddresses: addresses });
   const server = app.listen(PORT, HOST, async () => {
     log.info(`listening on ${HOST}:${PORT}`);
-    const [snapshot, remoteLine] = await Promise.all([
-      registry.state({ fresh: true }).catch(() => null),
-      remote.bannerLine().catch(() => null),
-    ]);
+    const snapshot = await registry.state({ fresh: true }).catch(() => null);
     banner(lanUrl, {
       addresses,
       backend: snapshot ? `${snapshot.active.label} (${snapshot.active.id})` : 'resolving…',
       reason: snapshot ? snapshot.reason : '',
       dataDir: DATA_DIR,
-      remote: remoteLine,
       admin: { url: `${lanUrl}/admin`, pin: auth.generatedPin },
     });
     if (snapshot && snapshot.state.detail) log.info(`printer detail: ${snapshot.state.detail}`);

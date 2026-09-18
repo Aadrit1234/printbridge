@@ -150,8 +150,8 @@ function isOptionRefusal(error) {
  * answers (already awake) or wakes up while we are still talking to it. Failing
  * is normal and not an error — the job retry loop is what finishes the story.
  */
-async function wake(timeoutMs = 5000) {
-  const url = endpoint();
+async function wake(timeoutMs = 5000, printerUrl = undefined) {
+  const url = endpoint(printerUrl);
   if (!url) return { ok: false, error: 'No network printer configured' };
   const started = Date.now();
   try {
@@ -168,6 +168,9 @@ module.exports = {
   kind: 'network',
 
   async available() { return Boolean(endpoint()); },
+
+  /** Usable for one specific printer address, when a job picked its own. */
+  async availableFor(url) { return Boolean(endpoint(url)); },
 
   wake,
   endpoint,
@@ -200,7 +203,7 @@ module.exports = {
   },
 
   async print({ job, filePath, options = {} }) {
-    const url = endpoint();
+    const url = endpoint(options.printerUrl);
     if (!url) throw new Error('No network printer configured');
     const fsp = require('fs').promises;
     const data = await fsp.readFile(filePath);

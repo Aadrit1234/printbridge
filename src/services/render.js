@@ -9,7 +9,7 @@ const fsp = fs.promises;
 const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
-const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { PDFDocument, StandardFonts, rgb, degrees } = require('pdf-lib');
 const QRCode = require('qrcode');
 const log = require('../logger').make('render');
 
@@ -86,7 +86,7 @@ async function testPagePdf({ printerName, backendLabel, serverUrl }) {
   let y = height - 190;
   for (const [label, value] of rows) {
     page.drawText(label.toUpperCase(), { x: 44, y, size: 8.5, font: bold, color: rgb(0.42, 0.5, 0.49) });
-    page.drawText(String(value), { x: 44, y: y - 16, size: 12, font: mono, color: rgb(0.1, 0.13, 0.13) });
+    page.drawText(sanitize(String(value)), { x: 44, y: y - 16, size: 12, font: mono, color: rgb(0.1, 0.13, 0.13) });
     y -= 52;
   }
 
@@ -115,7 +115,7 @@ async function qrCardPdf({ title, url, lines = [] }) {
   const { width, height } = page.getSize();
 
   page.drawRectangle({ x: 0, y: height - 150, width, height: 150, color: rgb(0.04, 0.24, 0.23) });
-  page.drawText(title || 'PrintBridge', { x: 44, y: height - 78, size: 34, font: bold, color: rgb(1, 1, 1) });
+  page.drawText(sanitize(title || 'PrintBridge'), { x: 44, y: height - 78, size: 34, font: bold, color: rgb(1, 1, 1) });
   page.drawText('Scan to upload & print', { x: 44, y: height - 112, size: 14, font: regular, color: rgb(0.72, 0.95, 0.9) });
 
   const image = await pdf.embedPng(png);
@@ -123,7 +123,7 @@ async function qrCardPdf({ title, url, lines = [] }) {
   page.drawImage(image, { x: (width - size) / 2, y: height - 150 - size - 70, width: size, height: size });
 
   let y = height - 150 - size - 130;
-  page.drawText(url, { x: 44, y, size: 12, font: regular, color: rgb(0.25, 0.3, 0.3) });
+  page.drawText(sanitize(url), { x: 44, y, size: 12, font: regular, color: rgb(0.25, 0.3, 0.3) });
   y -= 34;
   for (const line of lines) {
     page.drawText(line, { x: 44, y, size: 11, font: regular, color: rgb(0.35, 0.4, 0.4) });
@@ -136,4 +136,80 @@ async function qrCardPdf({ title, url, lines = [] }) {
   return pdf.save();
 }
 
-module.exports = { officeToPdf, hasOfficeSupport, testPagePdf, qrCardPdf };
+/* ---------------- token page (+ merge + rotate helpers) ---------------- */
+
+/**
+ * The pickup slip that becomes the first printed page of a walk-up job: the
+ * token, what was printed, and where to collect it. Monospace, ink on paper.
+ */
+async function tokenPagePdf({ token, printerName = '', printerNote = '', jobName = '', pages = null, copies = 1, mode = '', duplex = false, amount = null, currency = '' }) {
+  const pdf = await PDFDocument.create();
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const mono = await pdf.embedFont(StandardFonts.CourierBold);
+  const page = pdf.addPage(A4);
+  const { width, height } = page.getSize();
+
+  page.drawRectangle({ x: 0, y: height - 96, width, height: 96, color: rgb(0.05, 0.05, 0.05) });
+  page.drawText('YOUR PRINT IS READY', { x: 44, y: height - 52, size: 26, font: bold, color: rgb(1, 1, 1) });
+  page.drawText('Show this page to collect the print-out.', { x: 44, y: height - 78, size: 11, font: regular, color: rgb(0.8, 0.8, 0.8) });
+
+  page.drawText(sanitize(String(token || '')), {
+    x: 44, y: height - 200, size: 46, font: mono, color: rgb(0.05, 0.05, 0.05),
+  });
+  page.drawText('YOUR TOKEN NUMBER', { x: 44, y: height - 226, size: 9.5, font: bold, color: rgb(0.45, 0.5, 0.5) });
+
+  const rows = [
+    ['PRINTER', printerName || '—'],
+    ['JOB', jobName || '—'],
+    ['PAGES', pages == null ? '—' : String(pages)],
+    ['COPIES', String(copies || 1)],
+    ['PRINTING', [mode ? mode.replace(/^./, c => c.toUpperCase()) : null, duplex ? 'Duplex' : 'Single-sided'].filter(Boolean).join(' · ') || '—'],
+  ];
+  if (amount != null) rows.push(['CHARGE', `${currency} ${Number(amount).toFixed(2)}`]);
+  if (printerNote) rows.push(['WHERE', printerNote]);
+
+  let y = height - 340;
+  for (const [label, value] of rows) {
+    page.drawText(label, { x: 44, y, size: 8.5, font: bold, color: rgb(0.45, 0.5, 0.5) });
+    page.drawText(sanitize(String(value)), { x: 160, y, size: 12, font: regular, color: rgb(0.12, 0.14, 0.14) });
+    y -= 30;
+  }
+
+  // A cut line and a keep-this code at the bottom, like a real counter slip.
+  page.drawLine({ start: { x: 0, y: 60 }, end: { x: width, y: 60 }, thickness: 0.75, color: rgb(0.75, 0.78, 0.78), dashArray: [4, 4] });
+  page.drawText(sanitize(String(token || '')), { x: 44, y: 30, size: 11, font: mono, color: rgb(0.35, 0.4, 0.4) });
+  page.drawText('Keep this code — it can follow your print in the queue.', { x: 240, y: 32, size: 9, font: regular, color: rgb(0.5, 0.55, 0.55) });
+
+  log.info(`generated token page for ${token}`);
+  return pdf.save();
+}
+
+/** Concatenate PDFs into one document (handles mixed xref layouts via pdf-lib). */
+async function mergePdfs(docs) {
+  const out = await PDFDocument.create();
+  for (const bytes of docs) {
+    if (!bytes || !bytes.length) continue;
+    const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    const pages = await out.copyPages(src, src.getPageIndices());
+    for (const page of pages) out.addPage(page);
+  }
+  return out.save();
+}
+
+/**
+ * Turn a portrait PDF sideways: swap each page's dimensions and rotate its
+ * content 90° clockwise. Used when a person chooses landscape at print time —
+ * the preview shows the same rotation, so what they see is what prints.
+ */
+async function landscapePdf(pdfBytes) {
+  const pdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  for (const page of pdf.getPages()) {
+    const [w, h] = page.getSize();
+    page.setSize(h, w);
+    page.setRotation(degrees(90));
+  }
+  return pdf.save();
+}
+
+module.exports = { officeToPdf, hasOfficeSupport, testPagePdf, qrCardPdf, tokenPagePdf, mergePdfs, landscapePdf };

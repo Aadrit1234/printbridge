@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
-<meta name="theme-color" content="#070b10">
+<meta name="theme-color" content="#070a11">
 <title>PrintBridge — print from any device</title>
-<meta name="description" content="Self-hosted print server: upload from any phone or laptop, preview exactly what will print, and send it to your printer.">
+<meta name="description" content="Upload a document from any phone or laptop, pick the printer, check the preview, and print. Every print command gets a code you can follow.">
 <link rel="manifest" href="/manifest.webmanifest">
 <script src="/config.js"></script>
 <link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
@@ -16,9 +16,9 @@
 <body>
 <div class="app">
 
-  <!-- desktop sidebar -->
+  <!-- desktop rail -->
   <aside class="sidebar">
-    <div class="brand">
+    <a class="brand" href="#/print">
       <div class="brand-mark">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M7 3h10a1 1 0 0 1 1 1v3H6V4a1 1 0 0 1 1-1Z"/>
@@ -28,29 +28,29 @@
       </div>
       <div class="brand-text">
         <strong>PrintBridge</strong>
-        <span>network printing, no desktop</span>
+        <span>print from anything</span>
       </div>
-    </div>
+    </a>
 
-    <nav class="nav" id="sidebar-nav">
+    <nav class="nav">
       <a class="nav-item" href="#/print" data-route="print">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3"/></svg>
         <span>Print</span>
       </a>
-      <a class="nav-item" href="#/mine" data-route="mine">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
+      <a class="nav-item" href="#/history" data-route="history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
         <span>My prints</span>
         <span class="nav-badge" id="nav-badge-mine" hidden></span>
+      </a>
+      <a class="nav-item" href="#/code" data-route="code">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></svg>
+        <span>Print code</span>
       </a>
     </nav>
 
     <div class="nav-foot">
-      <a class="admin-link" id="admin-link" href="/admin" data-admin-link>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6l7-3Z"/></svg>
-        <span>Admin</span>
-      </a>
-      <div id="sidebar-printer">printer: connecting…</div>
-      <div class="row" style="margin-top:8px;gap:6px">
+      <div id="rail-printer">printer: connecting…</div>
+      <div class="row" style="gap:8px">
         <button class="icon-btn" id="btn-install" title="Install as app" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
         </button>
@@ -61,11 +61,11 @@
     </div>
   </aside>
 
-  <!-- mobile top bar -->
+  <!-- mobile title bar -->
   <header class="topbar">
     <div class="brand">
-      <div class="brand-mark">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <div class="brand-mark" style="width:34px;height:34px;border-radius:11px">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:18px;height:18px">
           <path d="M7 3h10a1 1 0 0 1 1 1v3H6V4a1 1 0 0 1 1-1Z"/>
           <path d="M4 8h16a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2v-3H5v3H3a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2Z"/>
           <path d="M6 14h12v6a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-6Z"/>
@@ -86,18 +86,18 @@
 
   <main id="view" aria-live="polite"></main>
 
-  <nav class="bottomnav" id="bottomnav">
+  <nav class="bottomnav">
     <a href="#/print" data-route="print">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3"/></svg>
       <span>Print</span>
     </a>
-    <a href="#/mine" data-route="mine">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
+    <a href="#/history" data-route="history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
       <span>My prints</span>
     </a>
-    <a href="/admin" class="bottomnav-admin" data-admin-link>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6l7-3Z"/></svg>
-      <span>Admin</span>
+    <a href="#/code" data-route="code">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></svg>
+      <span>Code</span>
     </a>
   </nav>
 

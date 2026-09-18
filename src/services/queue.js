@@ -19,6 +19,9 @@ const log = require('../logger').make('queue');
 const converter = require('./converter');
 const rasterizer = require('./rasterizer');
 const registry = require('./backends/registry');
+const tickets = require('./tickets');
+const render = require('./render');
+const printers = require('./printers');
 
 const EAGER_PREVIEW_PAGES = 6;   // rendered up front for an instant preview
 const RETRY_BASE_MS = 5000;      // first backoff between attempts
@@ -95,7 +98,33 @@ function defaultOptions(overrides = {}) {
     paper: overrides.paper && config.paper(overrides.paper) ? overrides.paper : config.get('paper'),
     scale: overrides.scale === 'actual' ? 'actual' : config.get('scale'),
     range: String(overrides.range || '').trim().slice(0, 120),
+    target: overrides.target ? String(overrides.target).trim().slice(0, 300) : '',
+    orientation: overrides.orientation === 'landscape' ? 'landscape' : 'portrait',
+    mode: overrides.mode === 'color' || overrides.mode === 'mono' ? overrides.mode : '',
+    printer: overrides.printer ? String(overrides.printer).trim().slice(0, 80) : '',
+    printerName: overrides.printerName ? String(overrides.printerName).trim().slice(0, 80) : '',
+    tokenPage: overrides.tokenPage === undefined ? Boolean(overrides.printer) : Boolean(overrides.tokenPage),
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Tickets                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Move the job's live ticket along with the job. Tickets are what the person
+ * holding the paper and the admin looking at the queue both refer to.
+ */
+function moveTicket(jobId, state, extra = {}) {
+  const job = storage.get(jobId);
+  if (!job) return null;
+  const live = tickets.active(job);
+  if (!live || tickets.isTerminal(live.state)) return null;
+  const updated = { ...live, ...extra, state, updatedAt: new Date().toISOString() };
+  const list = [...(job.tickets || [])];
+  list[list.length - 1] = updated;
+  storage.patch(jobId, { tickets: list }, { silent: true });
+  return updated;
 }
 
 /* ------------------------------------------------------------------ */
@@ -235,6 +264,38 @@ async function ensurePreviewPage(jobId, page) {
 /* Printing                                                            */
 /* ------------------------------------------------------------------ */
 
+async function buildPrintCopy(jobId, options, token) {
+  try {
+    const job = storage.get(jobId);
+    if (!job || !job.hasPdf) return;
+    let body = await fsp.readFile(storage.pdfPath(job));
+    if (options.orientation === 'landscape') body = Buffer.from(await render.landscapePdf(body));
+    let cover = Buffer.from(await render.tokenPagePdf({
+      token,
+      printerName: options.printerName || (options.printer && printers.get(options.printer) && printers.get(options.printer).name) || '',
+      printerNote: (options.printer && printers.get(options.printer) && printers.get(options.printer).note) || '',
+      jobName: job.name,
+      pages: job.pageCount,
+      copies: options.copies,
+      mode: options.mode || '',
+      duplex: Boolean(options.duplex),
+      amount: job.payment ? job.payment.amount : null,
+      currency: job.payment ? job.payment.currency : '',
+    }));
+    if (options.orientation === 'landscape') cover = Buffer.from(await render.landscapePdf(cover));
+    const merged = Buffer.from(await render.mergePdfs([cover, body]));
+    await fsp.writeFile(storage.printCopyPath(job), merged);
+    storage.patch(job.id, { printCopy: storage.printCopyPath(job) }, { silent: true });
+    log.info(`print copy built for ${jobId} (${token})`);
+  } catch (e) {
+    log.warn(`print copy build failed for ${jobId}: ${e.message}`);
+  }
+}
+
+/**
+ * Send a job to a printer. Every call opens a new ticket, so "print again"
+ * never reuses the code of the previous print command.
+ */
 async function print(jobId, overrides = {}) {
   const job = storage.get(jobId);
   if (!job) throw new Error('Job not found');
@@ -244,13 +305,57 @@ async function print(jobId, overrides = {}) {
   }
 
   clearRetry(jobId);
+  const options = defaultOptions({ ...job.options, ...overrides });
+
+  // A registered printer (PP-…) drives the whole command: its target decides
+  // where the job goes and, for shops, whether it has been paid for.
+  if (options.printer) {
+    const printer = printers.get(options.printer);
+    if (!printer) throw new Error('That printer is no longer registered');
+    if (!printer.active) throw new Error('That printer is paused — the owner has turned it off');
+    if (!printer.target) throw new Error('That printer has no print destination yet');
+    options.printerName = printer.name;
+    if (!options.target) options.target = printers.targetString(printer);
+    if (printer.category === 'shop') {
+      if (!['color', 'mono'].includes(options.mode)) throw new Error('Pick a colour or black & white option for this printer');
+      const paid = job.payment && job.payment.paid && job.payment.mode === options.mode && job.payment.printer === printer.id;
+      if (!paid) throw new Error('Payment required — finish the checkout for this printer first');
+    }
+  }
+
+  if (options.target) {
+    const resolved = await registry.resolveTarget(options.target).catch(() => null);
+    if (!resolved) throw new Error('That printer is not available — pick another one');
+    if (resolved.unavailable) throw new Error(`${resolved.reason} — pick another printer`);
+  }
+
+  const ticket = tickets.issue(job, {
+    target: options.target || null,
+    copies: options.copies,
+    paper: options.paper,
+    duplex: options.duplex,
+    allJobs: storage.list({ limit: 500 }),
+  });
+
+  // Build the print copy (token page merged in front) *before* the job becomes
+  // queued — run() picks it up so the file is guaranteed to exist when it prints.
+  job.token = ticket.token;
+  if (options.tokenPage) {
+    await buildPrintCopy(jobId, options, ticket.token);
+  } else {
+    await storage.purgePrintCopy(job).catch(() => {});
+  }
+
   storage.patch(jobId, {
     status: 'queued',
     phase: 'Queued',
     progress: 6,
     error: '',
     message: '',
-    options: defaultOptions({ ...job.options, ...overrides }),
+    target: options.target || job.target || null,
+    token: ticket.token,
+    tickets: tickets.append(job, ticket),
+    options,
     attempts: 0,
     firstAttemptAt: null,
     nextAttemptAt: null,
@@ -316,7 +421,9 @@ function wakeWaiters() {
 }
 
 async function run(job) {
-  const filePath = storage.pdfPath(job);
+  // The print copy (token page in front) is what actually prints when a
+  // walk-up job uses one; otherwise the plain printable PDF is used.
+  const filePath = (job.printCopy && fs.existsSync(job.printCopy)) ? job.printCopy : storage.pdfPath(job);
   if (!fs.existsSync(filePath)) {
     storage.patch(job.id, { status: 'failed', phase: 'Failed', progress: 100, error: 'Print file is missing — upload the document again' });
     return;
@@ -330,6 +437,7 @@ async function run(job) {
     firstAttemptAt: job.firstAttemptAt || new Date().toISOString(),
     nextAttemptAt: null,
   });
+  moveTicket(job.id, 'printing');
 
   try {
     const result = await registry.print({
@@ -350,6 +458,11 @@ async function run(job) {
       error: '',
       nextAttemptAt: null,
     });
+    moveTicket(job.id, 'printed', {
+      backend: result.backend,
+      printerJobId: result.printerJobId || null,
+      message: result.message || 'Sent to printer',
+    });
     log.info(`${job.id} printed via ${result.backend}: ${result.message}`);
   } catch (e) {
     const reason = errorText(e);
@@ -361,6 +474,7 @@ async function run(job) {
 
     if (withinWindow && isRetryable(e)) {
       const nextAttemptAt = new Date(Date.now() + delay).toISOString();
+      moveTicket(job.id, 'waiting', { message: reason });
       storage.patch(job.id, {
         status: 'waiting',
         phase: `Printer not ready — retrying in ${Math.round(delay / 1000)}s`,
@@ -383,6 +497,7 @@ async function run(job) {
       message: withinWindow ? '' : `${reason} · gave up after ${humanDuration(elapsed)} and ${current.attempts} attempt${current.attempts === 1 ? '' : 's'}`,
       nextAttemptAt: null,
     });
+    moveTicket(job.id, 'failed', { error: reason, message: reason });
     log.error(`${job.id} failed: ${reason}`);
   }
 }
@@ -399,6 +514,7 @@ async function cancel(jobId) {
       message: 'Canceled while waiting for the printer',
       nextAttemptAt: null,
     });
+    moveTicket(jobId, 'canceled', { message: 'Canceled by the sender' });
     return storage.summary(storage.get(jobId));
   }
   if (job.status === 'printing') {
@@ -409,10 +525,12 @@ async function cancel(jobId) {
       progress: 100,
       message: res.ok ? 'Canceled at the printer' : 'Marked canceled — the printer may still finish this page',
     });
+    moveTicket(jobId, 'canceled', { message: res.ok ? 'Canceled at the printer' : 'Marked canceled' });
     return storage.summary(storage.get(jobId));
   }
   if (job.status === 'queued') {
     storage.patch(jobId, { status: 'canceled', phase: 'Canceled', progress: 100, message: 'Canceled before printing' });
+    moveTicket(jobId, 'canceled', { message: 'Canceled before printing' });
     return storage.summary(storage.get(jobId));
   }
   throw new Error(`Cannot cancel a job that is ${job.status}`);
@@ -424,8 +542,17 @@ async function retry(jobId) {
   if (ACTIVE_STATUSES.includes(job.status)) throw new Error(`Job is already ${job.status}`);
   if (!job.hasPdf) throw new Error('Nothing to print — re-upload the document');
   clearRetry(jobId);
+  // A retry is a print command like any other, so it gets its own ticket.
+  const ticket = tickets.issue(job, {
+    target: job.target || null,
+    copies: (job.options && job.options.copies) || 1,
+    paper: (job.options && job.options.paper) || null,
+    duplex: Boolean(job.options && job.options.duplex),
+    allJobs: storage.list({ limit: 500 }),
+  });
   storage.patch(jobId, {
     status: 'queued', phase: 'Queued again', progress: 6, error: '', message: '',
+    token: ticket.token, tickets: tickets.append(job, ticket),
     attempts: 0, firstAttemptAt: null, nextAttemptAt: null,
   });
   pump();

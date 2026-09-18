@@ -9,13 +9,12 @@
  *
  *   apiBase   full origin of the backend, e.g. https://printbridge.tailnet-1234.ts.net
  *             (empty = this origin)
- *   adminUrl  where the admin console lives, e.g. https://printbridge.vercel.app/admin
- *             (empty = /admin on this origin)
  *
  * The backend must list that frontend origin in ALLOWED_ORIGINS or the browser
- * will refuse every request — see docs/deploy.md.
+ * will refuse every request — see docs/deploy.md. The admin console is never
+ * part of this bundle: it lives on the machine that runs the server.
  */
 window.PRINTBRIDGE_CONFIG = Object.assign(
-  { apiBase: '', adminUrl: '' },
+  { apiBase: '' },
   window.PRINTBRIDGE_CONFIG || {}
 );
