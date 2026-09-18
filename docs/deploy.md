@@ -106,7 +106,7 @@ What the build writes into `dist/config.js` (and why):
 | Key | Meaning |
 |---|---|
 | `apiBase` | the backend origin — every API call and file URL is built from it |
-| `adminBase` | where the control room lives, so the main site's **Admin** button points at the real console instead of a 404 |
+| `adminBase` | where the control room lives, so the main site's **Log in** button points at the real console instead of a 404 |
 
 * **Each preview deployment is a new origin.** Add it to `ALLOWED_ORIGINS`, or
   switch previews off for the project. Once an allowlist is set, a cross-site

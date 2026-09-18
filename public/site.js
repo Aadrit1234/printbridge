@@ -118,8 +118,49 @@
      Scroll reveals (IntersectionObserver)
      ---------------------------------------------------------- */
   var reveals = document.querySelectorAll("[data-reveal]");
+
+  function revealAll() {
+    for (var i = 0; i < reveals.length; i++) reveals[i].classList.add("revealed");
+  }
+
+  /* Nothing may ever stay invisible.
+     The reveal is CSS: `.js [data-reveal]` starts at opacity 0 and JS clears
+     it, animating in over about a second. In a tab that barely paints —
+     backgrounded, throttled, an embedded preview pane — the compositor
+     advances far slower than the clock, so the content sits at zero and the
+     page reads as blank. So look at what is on screen a beat after load: if it
+     has not actually faded in, drop the animation and show everything. */
+  window.setTimeout(function () {
+    // Anything on screen that is still faint means the animation is not really
+    // running. Off-screen elements are legitimately at zero, so ignore those.
+    var stuck = false;
+    for (var s = 0; s < reveals.length; s++) {
+      var box = reveals[s].getBoundingClientRect();
+      if (box.bottom < 0 || box.top > window.innerHeight) continue;
+      if (parseFloat(window.getComputedStyle(reveals[s]).opacity) < 0.6) { stuck = true; break; }
+    }
+    if (!stuck) return; // animating normally — leave the scroll reveal alone
+
+    for (var i = 0; i < reveals.length; i++) {
+      reveals[i].classList.add("revealed");
+      reveals[i].style.transition = "none";
+      reveals[i].style.opacity = "1";
+      reveals[i].style.transform = "none";
+    }
+
+    // The count-ups drive off rAF as well, so land them on their real values.
+    var nums = document.querySelectorAll("[data-count]");
+    for (var n = 0; n < nums.length; n++) {
+      var target = parseFloat(nums[n].getAttribute("data-count"));
+      if (!isFinite(target)) continue;
+      var text = Math.round(target).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      if (nums[n].firstChild && nums[n].firstChild.nodeType === 3) nums[n].firstChild.nodeValue = text;
+      else nums[n].textContent = text;
+    }
+  }, 1400);
+
   if (!("IntersectionObserver" in window) || reduce.matches) {
-    for (var r = 0; r < reveals.length; r++) reveals[r].classList.add("revealed");
+    revealAll();
   } else if (reveals.length) {
     var revealObserver = new IntersectionObserver(function (entries, obs) {
       entries.forEach(function (entry) {

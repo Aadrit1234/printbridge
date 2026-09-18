@@ -52,7 +52,7 @@ There are **three sites** in one server, and they have different jobs:
 
 | Site | Who it is for | What it does |
 |---|---|---|
-| `/` — **main site** | customers, the public | company, product, features, pricing, contact · two buttons: **Print** and **Admin** |
+| `/` — **main site** | customers, the public | company, product, features, pricing, contact · two buttons: **Print** and **Log in** |
 | `/print` — **print site** | whoever is standing at the printer | enter a printer code → upload → settings + preview → print → **token number** |
 | `/admin` — **admin site** | you, the owner | the printer, every job, every code, prices, the PIN |
 
@@ -214,7 +214,7 @@ separate decision. The shape that works:
    `PRINTBRIDGE_API_URL=https://<your-backend-host> npm run build:web`, then
    `vercel --prod`. The admin console is deliberately *not* in that bundle.
 3. Set the build's `PRINTBRIDGE_ADMIN_URL` to the backend so the main site's
-   **Admin** button points at the real console.
+   **Log in** button points at the real console.
 
 Full detail, including the CORS origin list the backend needs:
 **[docs/deploy.md](docs/deploy.md)**.

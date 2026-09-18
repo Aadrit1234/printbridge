@@ -5,7 +5,7 @@ printer, no app to install.**
 
 | Site | Path | Who it is for |
 |---|---|---|
-| **Main site** | `/` | the company — about, product, features, pricing, contact — with two buttons: **Print** and **Admin** |
+| **Main site** | `/` | the company — about, product, features, pricing, contact — with two buttons: **Print** and **Log in** |
 | **Print site** | `/print` | whoever is standing at the printer: enter a printer code, send a document, get a **token number** |
 | **Admin site** | `/admin` | the owner, behind a PIN: the printer, every job, every code, prices, storage, access |
 
@@ -260,7 +260,7 @@ HTTPS first. Details, the GitHub push and the `ALLOWED_ORIGINS` rules:
   from `ALLOWED_ORIGINS` on the backend (restart after changing it). Check with
   `curl -i -X OPTIONS <backend>/api/v1/jobs -H "Origin: <frontend>"`; a 403 body
   names the origin that was refused.
-- **The main site’s Admin button 404s on a static host** → the bundle was built
+- **The main site’s Log in button 404s on a static host** → the bundle was built
   without `PRINTBRIDGE_ADMIN_URL`; rebuild with it set to the backend origin.
 - **A file fails with “not a valid PDF”** → it carries a `.pdf` name but no PDF
   content. Re-export or re-send it.

@@ -247,9 +247,9 @@ body::before {
 .btn-print.liquid::before, .btn-print::before { background: var(--amber-soft); }
 .btn-print:hover { box-shadow: 0 22px 44px -18px rgba(194, 127, 34, 0.65); }
 
-.btn-admin { --btn-ink: var(--amber); background: rgba(246,242,234,0.05); color: var(--paper); border-color: rgba(246,242,234,0.5); }
-.btn-admin::before { background: var(--paper); }
-.btn-admin:hover { color: var(--ink); border-color: var(--paper); box-shadow: 0 22px 44px -20px rgba(246,242,234,0.5); }
+.btn-login { --btn-ink: var(--amber); background: rgba(246,242,234,0.05); color: var(--paper); border-color: rgba(246,242,234,0.5); }
+.btn-login::before { background: var(--paper); }
+.btn-login:hover { color: var(--ink); border-color: var(--paper); box-shadow: 0 22px 44px -20px rgba(246,242,234,0.5); }
 
 .btn-sm { font-size: 14px; padding: 9px 18px; }
 .btn-lg { font-size: 17px; padding: 15px 30px; }
