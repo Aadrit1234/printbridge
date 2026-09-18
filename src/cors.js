@@ -71,6 +71,18 @@ function isAllowedCrossSite(req) {
   return allowedOrigins().includes(origin);
 }
 
+/**
+ * True only for a request that arrives from a *different* site: browsers send
+ * Origin on every POST, including same-origin ones, so an allowlist must never
+ * be read as "this server's own address is not allowed". A page served by this
+ * server (the print site, the admin console) therefore always passes.
+ */
+function isForeignCrossSite(req) {
+  const origin = originOf(req);
+  if (!origin) return false;
+  return origin !== sameOrigin(req);
+}
+
 function middleware() {
   return (req, res, next) => {
     // Only the API is ever called cross-origin; static assets keep a clean,
@@ -98,7 +110,7 @@ function middleware() {
       // browser blocks the real request for us.
       res.status(204).end();
       return;
-    } else if (origin && allowedOrigins().length) {
+    } else if (isForeignCrossSite(req) && allowedOrigins().length) {
       log.warn(`refused a cross-site API request from ${origin} — not in ALLOWED_ORIGINS`);
       res.status(403).json({ error: 'This origin is not allowed to use this print server', origin });
       return;
@@ -108,4 +120,4 @@ function middleware() {
   };
 }
 
-module.exports = { middleware, allowedOrigins, isAllowedCrossSite, sameOrigin };
+module.exports = { middleware, allowedOrigins, isAllowedCrossSite, isForeignCrossSite, sameOrigin };

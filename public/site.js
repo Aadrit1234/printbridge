@@ -73,6 +73,48 @@
   }
 
   /* ----------------------------------------------------------
+     Light / dark theme
+     ----------------------------------------------------------
+     index.html's pre-paint script has already applied the choice; this only
+     flips it. The key and its values are the whole product's, so a person who
+     picks dark here gets a dark print site and a dark console too. */
+  var themeBtn = document.getElementById("theme-toggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("pb.theme", next); } catch (e) { /* private mode */ }
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", next === "dark" ? "#0a0f1b" : "#0e1524");
+    });
+  }
+
+  /* ----------------------------------------------------------
+     Shop pricing: yearly ⇄ lifetime
+     ---------------------------------------------------------- */
+  var billOpts = document.querySelectorAll(".bill-opt");
+  if (billOpts.length) {
+    var SHOP_PLANS = {
+      year: { price: "\u20B9499", term: "per year" },
+      life: { price: "\u20B95,999", term: "one-time \u00B7 lifetime" }
+    };
+    var shopPrice = document.getElementById("shop-price");
+    var shopTerm = document.getElementById("shop-term");
+    billOpts.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var plan = SHOP_PLANS[btn.getAttribute("data-period")] || SHOP_PLANS.year;
+        billOpts.forEach(function (other) {
+          var on = other === btn;
+          other.classList.toggle("is-on", on);
+          other.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        if (shopPrice) shopPrice.textContent = plan.price;
+        if (shopTerm) shopTerm.textContent = plan.term;
+      });
+    });
+  }
+
+  /* ----------------------------------------------------------
      Scroll reveals (IntersectionObserver)
      ---------------------------------------------------------- */
   var reveals = document.querySelectorAll("[data-reveal]");

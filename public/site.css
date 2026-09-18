@@ -75,6 +75,59 @@ body::before {
 }
 
 /* ============================================================
+   LIGHT / DARK
+   Light is the default: ink plates on paper. Dark re-plates the
+   *paper* sections onto deep ink. The bands that are already dark
+   on purpose — the hero, the product strip, contact and the footer
+   — keep their own colours, which is why this block sits before the
+   section rules: what those rules set deliberately still wins.
+   ============================================================ */
+
+[data-theme="dark"] {
+  --line: rgba(246, 242, 234, 0.14);
+  --paper-2: #131c30;
+  --mist: #101828;
+
+  --page: #0a0f1b;
+  --on-page: #eef1f7;
+  --on-page-2: #b9c3d6;
+  --on-page-faint: #8b96ae;
+}
+
+[data-theme="dark"] body { background: var(--page); color: var(--on-page); }
+[data-theme="dark"] body::before { mix-blend-mode: screen; opacity: 0.035; }
+
+/* copy that sits on paper in light mode */
+[data-theme="dark"] .lead { color: var(--on-page-2); }
+[data-theme="dark"] .story-row { color: var(--on-page-2); }
+[data-theme="dark"] .stat-num { color: var(--on-page); }
+[data-theme="dark"] .stat-num small { color: var(--amber); }
+[data-theme="dark"] .stat dd { color: var(--on-page-faint); }
+[data-theme="dark"] .card-num { color: var(--on-page-faint); }
+[data-theme="dark"] .pricing-note { color: var(--on-page-faint); }
+[data-theme="dark"] .hl { color: var(--amber); }
+
+/* surfaces that were paper */
+[data-theme="dark"] .stat { background: var(--paper-2); }
+[data-theme="dark"] .stat:hover { background: #182238; }
+[data-theme="dark"] .card { background: var(--paper-2); }
+[data-theme="dark"] .card p { color: var(--on-page-2); }
+[data-theme="dark"] .card > svg { color: var(--amber); background: rgba(224, 164, 76, 0.16); }
+
+[data-theme="dark"] .pricing { background: linear-gradient(180deg, var(--page) 0%, var(--mist) 100%); }
+[data-theme="dark"] .tier { background: var(--paper-2); }
+[data-theme="dark"] .tier-featured { background: #182238; border-color: rgba(224, 164, 76, 0.4); }
+[data-theme="dark"] .tier-price strong { color: var(--on-page); }
+[data-theme="dark"] .tier-price small,
+[data-theme="dark"] .tier-costline { color: var(--on-page-faint); }
+[data-theme="dark"] .tier-desc { color: var(--on-page-2); }
+[data-theme="dark"] .tier-list li { color: var(--on-page-2); }
+[data-theme="dark"] .tier-costline em { color: var(--amber); }
+
+/* a plain button on a dark tier needs a light edge */
+[data-theme="dark"] .tier .btn { --btn-fg: var(--paper); }
+
+/* ============================================================
    NAV
    ============================================================ */
 
@@ -140,6 +193,25 @@ body::before {
 .nav-toggle[aria-expanded="true"] svg {
   transform: rotate(180deg);
 }
+
+/* light / dark switch — sits on the nav, which is dark in both themes */
+.nav-tools { display: flex; align-items: center; gap: 10px; }
+.theme-toggle {
+  width: 42px; height: 42px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(246, 242, 234, 0.05);
+  border: 1.5px solid rgba(246, 242, 234, 0.5);
+  border-radius: 999px;
+  color: var(--paper);
+  cursor: pointer;
+  transition: background 0.3s var(--ease), border-color 0.3s var(--ease), color 0.3s var(--ease), transform 0.3s var(--ease);
+}
+.theme-toggle:hover { background: rgba(246, 242, 234, 0.12); border-color: var(--amber); color: var(--amber); transform: translateY(-1px); }
+.theme-toggle svg { width: 19px; height: 19px; }
+.theme-toggle .icon-moon { display: block; }
+.theme-toggle .icon-sun { display: none; }
+[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
 
 /* ============================================================
    BUTTONS — liquid hover
@@ -463,6 +535,22 @@ body::before {
 
 .tier-desc { font-size: 15px; color: #5a6580; min-height: 3.4em; }
 .tier-featured .tier-desc { color: rgba(246,242,234,0.72); }
+
+/* yearly ⇄ lifetime, only on the shop tier (always a dark card) */
+.bill-switch {
+  display: inline-flex; align-self: flex-start; gap: 4px;
+  padding: 4px; border-radius: 999px;
+  background: rgba(246, 242, 234, 0.08);
+  border: 1px solid rgba(246, 242, 234, 0.18);
+}
+.bill-opt {
+  font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.03em;
+  padding: 7px 13px; border-radius: 999px; border: 0; cursor: pointer;
+  background: transparent; color: rgba(246, 242, 234, 0.68);
+  transition: background 0.3s var(--ease), color 0.3s var(--ease);
+}
+.bill-opt:hover { color: var(--paper); }
+.bill-opt.is-on { background: var(--amber); color: var(--ink); }
 
 .tier-list { display: grid; gap: 11px; margin: 4px 0 6px; flex: 1; }
 .tier-list li {

@@ -1,4 +1,4 @@
-# <img src="docs/printer.svg" width="28" height="28" alt=""> PrintBridge 2.2
+# <img src="docs/printer.svg" width="28" height="28" alt=""> PrintBridge 2.3
 
 Self-hosted print infrastructure for workspaces and shops: **three sites, one
 printer, no app to install.**
@@ -13,6 +13,11 @@ The admin site exists **only on the machine that runs the server** — the one
 cabled (or Wi-Fi’d) to the printer. The two public sites can also be hosted
 statically (Vercel, Netlify) while the backend stays home. See
 **[docs/deploy.md](docs/deploy.md)**.
+
+All three sites ship a **light and dark theme**: the switch sits in the main
+site's nav and the print site's header (and in the console's sidebar). The
+choice is one shared preference (`pb.theme`), so picking dark on the main site
+means the print site opens dark too.
 
 ## How a print happens
 
@@ -164,7 +169,7 @@ upload limit, preview page limit, keep-alive interval, retry window,
 |---|---|
 | `npm start` | run the server |
 | `npm run dev` | run with auto-restart on file changes |
-| `npm run check` | syntax-check every source file |
+| `npm run check` | syntax-check every source file (server, `src/`, scripts and the front-end) |
 | `npm run smoke` | end-to-end guest pipeline + auth + isolation |
 | `npm run smoke:walkup` | both guest flows (workspace and shop), codes, checkout, code page |
 | `npm run smoke:ipp` | Wi-Fi/IPP end-to-end against a simulated network printer |

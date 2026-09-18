@@ -9,7 +9,7 @@
  *
  * API calls and preview images are never cached — they are live state. */
 
-const VERSION = 'pb-v12';
+const VERSION = 'pb-v16';
 /* Only the walk-up print site is cached: a phone that scanned the QR keeps
  * working on a flaky connection. The admin console is deliberately never
  * cached — it must always be the current build, and it is useless offline

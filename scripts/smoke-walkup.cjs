@@ -47,9 +47,13 @@ const ok = (label, condition, detail = '') => {
   else { failures++; console.log(`  ✗ ${label}${detail ? ` — ${detail}` : ''}`); }
 };
 
-async function req(url, { method = 'GET', body, device = DEVICE, form = null, admin = false } = {}) {
+/* `origin` mimics a browser: real ones send Origin on every POST, including
+ * same-origin ones, which is exactly the case an ALLOWED_ORIGINS list must not
+ * refuse. */
+async function req(url, { method = 'GET', body, device = DEVICE, form = null, admin = false, origin = null } = {}) {
   const headers = {};
   if (device) headers['x-device-id'] = device;
+  if (origin) headers.origin = origin;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (admin && cookie) headers.cookie = cookie;
   const res = await fetch(BASE + url, {
@@ -216,6 +220,26 @@ async function main() {
     ok('printing the same document again needs its own payment',
       secondMode.status === 409 || (secondMode.status === 200 && secondMode.payload.token !== sPrint.payload.token),
       secondMode.status === 409 ? secondMode.payload.error : secondMode.payload.token);
+
+    /* ---------------- a same-origin browser POST is not refused ---------------- */
+    const form = new FormData();
+    form.append('files', new Blob(['same-origin check'], { type: 'text/plain' }), 'same-origin.txt');
+    const sameOriginPost = await req(`${GS}/jobs`, { method: 'POST', form, origin: BASE });
+    ok('a same-origin POST with an Origin header is accepted (ALLOWED_ORIGINS set)',
+      sameOriginPost.status === 201, `${sameOriginPost.status} ${sameOriginPost.status !== 201 ? JSON.stringify(sameOriginPost.payload) : ''}`);
+    if (sameOriginPost.payload && sameOriginPost.payload.jobs) {
+      await req(`${GS}/jobs/${sameOriginPost.payload.jobs[0].id}`, { method: 'DELETE' }).catch(() => {});
+    }
+
+    // With an allowlist configured, a foreign site must not even be able to
+    // trigger a request; without one, the API stays open (that is the LAN case).
+    const configured = String(process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+    const foreignPost = await req(`${GS}/jobs`, { method: 'POST', body: { nothing: true }, origin: 'https://someone-elses-site.example' });
+    if (configured.length) {
+      ok('a foreign origin is refused outright', foreignPost.status === 403, `${foreignPost.status} ${JSON.stringify(foreignPost.payload)}`);
+    } else {
+      ok('no allowlist set, so the API stays open to this network (skipped)', true, 'set ALLOWED_ORIGINS to exercise the refusal');
+    }
 
     /* ---------------- codes are scoped to one device ---------------- */
     const foreign = await req(`${GS}/tickets/${encodeURIComponent(wToken)}`, { device: OTHER_DEVICE });
