@@ -12,10 +12,17 @@
  *      which means SameSite=None; Secure (see auth.js) and
  *      Access-Control-Allow-Credentials on every response
  *
- * Anything not on the allowlist is left exactly as it was: no CORS headers, so
- * the browser refuses to let another site read the response. That is the whole
- * security story here, and it is why the allowlist is an explicit list of
- * origins rather than a wildcard.
+ * Anything not on the allowlist gets no CORS headers, so the browser refuses to
+ * let another site read the response — that is why the allowlist is an explicit
+ * list of origins rather than a wildcard.
+ *
+ * And when an allowlist *is* configured, a cross-site request from an origin
+ * that is not on it is refused outright (403). No CORS headers alone would let
+ * a page on another site still *trigger* requests it cannot read — a form post
+ * to /api/v1/jobs prints a document — which is not a theory worth tolerating on
+ * a server that can reach a printer. Requests with no Origin header (curl,
+ * native apps, health checks, a service manager) and same-origin calls are
+ * unaffected, and with no allowlist configured nothing changes at all.
  *
  * Preflight (OPTIONS) is answered before the admin gate: a preflight carries no
  * cookies, so routing it through requireAdmin would fail every request.
@@ -90,6 +97,10 @@ function middleware() {
       // Unknown origin: answer the preflight without CORS headers, so the
       // browser blocks the real request for us.
       res.status(204).end();
+      return;
+    } else if (origin && allowedOrigins().length) {
+      log.warn(`refused a cross-site API request from ${origin} — not in ALLOWED_ORIGINS`);
+      res.status(403).json({ error: 'This origin is not allowed to use this print server', origin });
       return;
     }
 

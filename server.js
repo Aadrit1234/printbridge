@@ -35,7 +35,9 @@ loadEnvFile(path.join(__dirname, '.env'));
 
 const PORT = parseInt(process.env.PORT, 10) || 8088;
 const HOST = process.env.HOST || '0.0.0.0';
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+/* Resolved, not just joined: a relative DATA_DIR (DATA_DIR=./tmp) would make
+ * every stored file path relative, and Express refuses to sendFile one. */
+const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
 
 function lanAddresses() {
   const out = [];
@@ -50,7 +52,8 @@ function lanAddresses() {
 }
 
 function banner(baseUrl, extra) {
-  return QRCode.toString(baseUrl, { type: 'terminal', small: true, margin: 1 }).then((qr) => {
+  const printUrl = `${baseUrl}/print`;
+  return QRCode.toString(printUrl, { type: 'terminal', small: true, margin: 1 }).then((qr) => {
     const lines = [
       '',
       '  ┌─────────────────────────────────────────────┐',
@@ -64,9 +67,13 @@ function banner(baseUrl, extra) {
       '',
       qr.split('\n').filter(Boolean).map(l => '  ' + l).join('\n'),
       '',
-      `  Print app    ${baseUrl}/print`,
-      `  Admin app    ${extra.admin.url}`,
-      `  Corporate    ${baseUrl}`,
+      `  Main site    ${baseUrl}          (about · product · pricing · contact)`,
+      `  Print site   ${printUrl}          (what the QR points at)`,
+      `  Admin site   ${extra.admin.url}`,
+      ...(extra.walkUp && extra.walkUp.length
+        ? ['', '  Walk-up printer codes (enter these on the print site):',
+           ...extra.walkUp.map(p => `    ${p.code}   ${p.name} · ${p.category}${p.active === false ? ' (paused)' : ''}`)]
+        : []),
       extra.admin.pin
         ? `  Admin PIN    ${extra.admin.pin}    (first run — change it in Admin → Access)`
         : '  Admin PIN    as you set it (Admin → Access to change)',
@@ -117,6 +124,7 @@ async function main() {
       reason: snapshot ? snapshot.reason : '',
       dataDir: DATA_DIR,
       admin: { url: `${lanUrl}/admin`, pin: auth.generatedPin },
+      walkUp: require('./src/services/printers').all(),
     });
     if (snapshot && snapshot.state.detail) log.info(`printer detail: ${snapshot.state.detail}`);
   });

@@ -9,28 +9,21 @@
  *
  * API calls and preview images are never cached — they are live state. */
 
-const VERSION = 'pb-v11';
-/* Only the guest app is cached: a phone that scanned the QR keeps working on a
- * flaky connection. The admin app is deliberately never cached — it must always
- * be the current build, and it is useless offline anyway. */
+const VERSION = 'pb-v12';
+/* Only the walk-up print site is cached: a phone that scanned the QR keeps
+ * working on a flaky connection. The admin console is deliberately never
+ * cached — it must always be the current build, and it is useless offline
+ * anyway. The marketing site is not cached either; it is not what anyone needs
+ * when the network is down. */
 const SHELL = [
-  '/',
-  '/index.html',
-  '/assets/app.css',
+  '/print/',
+  '/print/index.html',
+  '/print/print.css',
+  '/print/print.js',
   '/assets/icon.svg',
   '/assets/icon-192.png',
-  '/app/main.js',
-  '/app/api.js',
-  '/app/store.js',
-  '/app/device.js',
-  '/app/ui.js',
-  '/app/theme.js',
-  '/app/prefs.js',
-  '/app/views/print.js',
-  '/app/views/job.js',
-  '/app/views/history.js',
-  '/app/views/code.js',
 ];
+const SHELL_DOCUMENT = '/print/index.html';
 
 /* True when we are replacing an older PrintBridge cache — i.e. the user is
  * upgrading, so a page may be running modules from a previous build. */
@@ -85,19 +78,22 @@ self.addEventListener('fetch', (event) => {
     if (new URL(request.referrer).pathname.startsWith('/admin')) return;
   } catch { /* no referrer — treat as a guest request */ }
 
-  // Documents: network first, cache only as an offline fallback.
-  if (request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+  // Documents: network first, cache only as an offline fallback. Only the
+  // print site may be answered offline — anything else (the marketing site)
+  // just fails like it normally would rather than serving the wrong page.
+  if (request.mode === 'navigate' || url.pathname.endsWith('.html')) {
+    if (!url.pathname.startsWith('/print')) return;
     event.respondWith((async () => {
       try {
         const fresh = await fetch(request);
-        if (fresh && fresh.ok) {
+        if (fresh && fresh.ok && url.pathname.startsWith('/print')) {
           const cache = await caches.open(VERSION);
-          cache.put('/', fresh.clone()).catch(() => undefined);
+          cache.put(SHELL_DOCUMENT, fresh.clone()).catch(() => undefined);
         }
         return fresh;
       } catch {
         const cache = await caches.open(VERSION);
-        const cached = (await cache.match('/')) || (await cache.match('/index.html'));
+        const cached = (await cache.match('/print/')) || (await cache.match(SHELL_DOCUMENT));
         return cached || Response.error();
       }
     })());

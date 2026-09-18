@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070a11">
+<meta name="description" content="Send a document to this printer from your phone — no account, no app.">
+<title>PrintBridge — Print here</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
+<link rel="apple-touch-icon" href="/assets/icon-192.png">
+<link rel="stylesheet" href="./print.css">
+<script src="/config.js"></script>
+</head>
+<body>
+<div class="shell">
+
+  <header class="topbar">
+    <a class="brand" href="/" title="PrintBridge">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 8V4h12v4"/>
+          <rect x="3" y="8" width="18" height="8" rx="2"/>
+          <path d="M6.5 12h5"/>
+          <path d="M17.5 12v.01"/>
+          <path d="M9 16h6"/>
+        </svg>
+      </span>
+      <span class="brand-text"><strong>PrintBridge</strong><span>Walk-up printing</span></span>
+    </a>
+  </header>
+
+  <div class="stepper" id="stepper">
+    <ol class="steps" id="steps-track" aria-label="Progress"></ol>
+    <p class="step-count" id="step-count"></p>
+  </div>
+
+  <main class="stages">
+    <section class="step" id="step-code" aria-labelledby="h-code"></section>
+    <section class="step" id="step-mode" hidden></section>
+    <section class="step" id="step-details" hidden></section>
+    <section class="step" id="step-upload" hidden></section>
+    <section class="step" id="step-settings" hidden></section>
+    <section class="step" id="step-payment" hidden></section>
+    <section class="step" id="step-token" hidden></section>
+  </main>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="./print.js"></script>
+<script>
+  /* Installable for the people who use the same printer all day. Failures are
+   * silent: a service worker is a nicety, never a requirement. */
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js').catch(function () {});
+    });
+  }
+</script>
+</body>
+</html>

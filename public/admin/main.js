@@ -14,6 +14,7 @@ setThumbUrlBuilder(api.thumbUrl);
 
 import * as queueView from './views/queue.js';
 import * as codesView from './views/codes.js';
+import * as printersView from './views/printers.js';
 import * as printerView from './views/printer.js';
 import * as settingsView from './views/settings.js';
 import * as accessView from './views/access.js';
@@ -22,6 +23,7 @@ const viewHost = document.getElementById('view');
 const routes = [
   { match: /^#\/queue\/?$/, view: queueView, name: 'queue', title: 'Queue' },
   { match: /^#\/codes\/?$/, view: codesView, name: 'codes', title: 'Print codes' },
+  { match: /^#\/printers\/?$/, view: printersView, name: 'printers', title: 'Printers' },
   { match: /^#\/printer\/?$/, view: printerView, name: 'printer', title: 'Printer' },
   { match: /^#\/settings\/?$/, view: settingsView, name: 'settings', title: 'Settings' },
   { match: /^#\/access\/?$/, view: accessView, name: 'access', title: 'Access' },
@@ -67,7 +69,7 @@ function loginShell(message) {
       <div id="login-error" class="job-error ${message ? '' : 'hidden'}" style="margin-top:12px">${esc(message)}</div>
       <div class="login-foot">
         <div class="login-hint">The PIN is printed in the server console on first run.<br>Lost it? Delete <code>data/access.json</code> and restart.</div>
-        <a class="btn sm ghost" href="/">${icons.printer}<span>Print page</span></a>
+        <a class="btn sm ghost" href="/print/">${icons.printer}<span>Print page</span></a>
       </div>
     </div>
   </div>`;

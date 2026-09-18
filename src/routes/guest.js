@@ -167,6 +167,35 @@ router.get('/tickets/:token', deviceGate, (req, res) => {
   return res.status(404).json({ error: 'No print with that code belongs to this device' });
 });
 
+/**
+ * Pay for a shop job. The amount is computed by the server from the owner's
+ * prices and the document's real page count, and the record it writes is what
+ * `POST /jobs/:id/print` checks before it will send anything to the printer.
+ */
+router.post('/jobs/:id/pay', deviceGate, async (req, res) => {
+  const job = ownJob(req, res);
+  if (!job) return;
+  const body = req.body || {};
+  try {
+    const summary = await queue.pay(job.id, {
+      printerId: body.printer || body.printerId,
+      mode: body.mode,
+      method: body.method,
+    });
+    res.json({ job: summary, payment: summary.payment });
+  } catch (e) {
+    res.status(409).json({ error: e.message });
+  }
+});
+
+/** The server's own price for this job, so a shop total can be trusted. */
+router.get('/jobs/:id/quote', deviceGate, (req, res) => {
+  const job = ownJob(req, res);
+  if (!job) return;
+  const printer = require('../services/printers').get(String(req.query.printer || ''));
+  res.json({ quote: queue.quote(job, printer) });
+});
+
 /** Send a job that already exists again — a fresh print command, a fresh code. */
 router.post('/jobs/:id/retry', deviceGate, async (req, res) => {
   const job = ownJob(req, res);
@@ -377,36 +406,6 @@ router.get('/printers/:code', (req, res) => {
   const printer = printers.findByCode(req.params.code);
   if (!printer) return res.status(404).json({ error: 'No printer has that code — read the sticker again' });
   res.json({ printer: printers.publicSheet(printer) });
-});
-
-/** Read-only quote for a shop printer, keyed off the job's real page count. */
-router.get('/printers/:code/quote', (req, res) => {
-  const printers = require('../services/printers');
-  const printer = printers.findByCode(req.params.code);
-  if (!printer) return res.status(404).json({ error: 'No printer has that code — read the sticker again' });
-  const job = ownJob(req, res);
-  if (!job) return;
-  const sheet = printers.publicSheet(printer);
-  if (sheet.category !== 'shop' || !sheet.pricing) {
-    return res.json({ quote: null, note: 'This printer is not a paid shop — just print.' });
-  }
-  const pages = job.pageCount;
-  const currency = sheet.pricing.currency;
-  const color = Number(sheet.pricing.colorPerPage);
-  const mono = Number(sheet.pricing.monoPerPage);
-  const colorTotal = Math.round(pages * color * 100) / 100;
-  const monoTotal = Math.round(pages * mono * 100) / 100;
-  res.json({
-    quote: {
-      printerId: printer.id,
-      printerName: printer.name,
-      pages,
-      currency,
-      colour: { perPage: color, total: colorTotal },
-      mono: { perPage: mono, total: monoTotal },
-    },
-    note: 'Share the job on this printer — payment is settled by the printer at the counter.',
-  });
 });
 
 module.exports = router;

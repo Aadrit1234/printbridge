@@ -90,6 +90,14 @@ export const api = {
   printerQueueDepth: () => request('/printer/queue-depth'),
   printerWake: () => request('/printer/wake', { method: 'POST', body: {} }),
 
+  /* ---------------- walk-up printers ---------------- */
+  printers: () => request('/printers'),
+  printer: (id) => request(`/printers/${encodeURIComponent(id)}`),
+  printerByCode: (value) => request(`/printers/lookup/${encodeURIComponent(value)}`),
+  createPrinter: (body) => request('/printers', { method: 'POST', body }),
+  updatePrinter: (id, patch) => request(`/printers/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch }),
+  deletePrinter: (id) => request(`/printers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
   /* ---------------- jobs ---------------- */
   jobs: (limit = 100) => request(`/jobs?limit=${limit}`),
   job: (id) => request(`/jobs/${encodeURIComponent(id)}`),

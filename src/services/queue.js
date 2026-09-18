@@ -305,7 +305,14 @@ async function print(jobId, overrides = {}) {
   }
 
   clearRetry(jobId);
-  const options = defaultOptions({ ...job.options, ...overrides });
+  const merged = { ...job.options, ...overrides };
+  const options = defaultOptions({
+    ...merged,
+    // The token page belongs to *this* print command, not to the upload: a job
+    // that names a registered walk-up printer is always identified by its code
+    // page sitting on top of the document, whatever the stored options say.
+    tokenPage: overrides.tokenPage === undefined ? Boolean(merged.printer) : Boolean(overrides.tokenPage),
+  });
 
   // A registered printer (PP-…) drives the whole command: its target decides
   // where the job goes and, for shops, whether it has been paid for.
@@ -536,6 +543,68 @@ async function cancel(jobId) {
   throw new Error(`Cannot cancel a job that is ${job.status}`);
 }
 
+/**
+ * Settle a shop job's bill before it is allowed to print.
+ *
+ * A shop printer never prints on an unpaid job, so the checkout has to be a
+ * server-side record rather than a flag in a browser: it names the printer, the
+ * colour/mono mode and the page count the price was computed from. The amount
+ * is always recomputed here from the owner's prices — the browser's estimate is
+ * only ever a preview. One payment covers one print command; printing the same
+ * document again means paying again.
+ */
+async function pay(jobId, { printerId, mode, method = 'counter' } = {}) {
+  const job = storage.get(jobId);
+  if (!job) throw new Error('Job not found');
+  if (!job.hasPdf) throw new Error('This document is still being prepared — try again in a moment');
+  if (ACTIVE_STATUSES.includes(job.status)) throw new Error(`That print is already ${job.status}`);
+
+  const printer = printers.get(printerId);
+  if (!printer) throw new Error('That printer is not registered any more');
+  if (!printer.active) throw new Error('That printer is paused — the owner has turned it off');
+  if (printer.category !== 'shop') throw new Error('This printer is free to print at — no payment needed');
+  if (!printer.pricing) throw new Error('This printer has no per-page prices set');
+  if (!['color', 'mono'].includes(mode)) throw new Error('Choose colour or black & white first');
+
+  const pages = job.pageCount || null;
+  if (!pages) throw new Error('Page count is not ready yet — try again in a moment');
+
+  const perPage = Number(mode === 'color' ? printer.pricing.colorPerPage : printer.pricing.monoPerPage);
+  const amount = Math.round(pages * perPage * 100) / 100;
+  const payment = {
+    paid: true,
+    printer: printer.id,
+    printerCode: printer.code,
+    mode,
+    currency: printer.pricing.currency,
+    perPage,
+    pages,
+    amount,
+    method: String(method || 'counter').slice(0, 40),
+    at: new Date().toISOString(),
+  };
+
+  storage.patch(jobId, { payment });
+  log.info(`${jobId} paid ${amount} ${payment.currency} (${mode}, ${pages} page(s)) at ${printer.code}`);
+  return storage.summary(storage.get(jobId));
+}
+
+/** What a shop job would cost right now — the same maths pay() will apply. */
+function quote(job, printer) {
+  if (!job || !printer || printer.category !== 'shop' || !printer.pricing) return null;
+  const pages = job.pageCount || 0;
+  const color = Math.round(pages * Number(printer.pricing.colorPerPage) * 100) / 100;
+  const mono = Math.round(pages * Number(printer.pricing.monoPerPage) * 100) / 100;
+  return {
+    printerId: printer.id,
+    printerName: printer.name,
+    pages,
+    currency: printer.pricing.currency,
+    colour: { perPage: printer.pricing.colorPerPage, total: color },
+    mono: { perPage: printer.pricing.monoPerPage, total: mono },
+  };
+}
+
 async function retry(jobId) {
   const job = storage.get(jobId);
   if (!job) throw new Error('Job not found');
@@ -586,7 +655,7 @@ function reconcile() {
 }
 
 module.exports = {
-  create, createFromPdf, print, cancel, retry, reconcile,
+  create, createFromPdf, print, pay, quote, cancel, retry, reconcile,
   ensurePreviewPage, defaultOptions, pumpWaiting, wakeWaiters,
   EAGER_PREVIEW_PAGES, ACTIVE_STATUSES,
 };

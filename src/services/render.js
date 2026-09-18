@@ -12,6 +12,7 @@ const { execFile } = require('child_process');
 const { PDFDocument, StandardFonts, rgb, degrees } = require('pdf-lib');
 const QRCode = require('qrcode');
 const log = require('../logger').make('render');
+const { winAnsiSafe: sanitize } = require('./pdf-text');
 
 const A4 = [595.28, 841.89];
 

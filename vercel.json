@@ -6,7 +6,8 @@
   "framework": null,
   "cleanUrls": false,
   "rewrites": [
-    { "source": "/admin", "destination": "/admin/index.html" }
+    { "source": "/print", "destination": "/print/index.html" },
+    { "source": "/print/", "destination": "/print/index.html" }
   ],
   "headers": [
     {
@@ -19,6 +20,10 @@
     },
     {
       "source": "/manifest.webmanifest",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/deployment.json",
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     },
     {

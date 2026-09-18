@@ -46,10 +46,16 @@ function block() {
 
 function newCode() { return `PP-${block()}-${block()}`; }
 
+/*
+ * Codes are written, printed and read out with their "PP-" prefix, so every
+ * entry point accepts either form: "PP-7K4Q-2M9D", "pp7k4q2m9d" and "7K4Q2M9D"
+ * are the same printer. Only the two blocks of the body are significant.
+ */
 function normalizeCode(value) {
   const raw = String(value || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
-  if (raw.length !== GROUP * 2) return null;
-  return `PP-${raw.slice(0, GROUP)}-${raw.slice(GROUP)}`;
+  const body = (raw.length === GROUP * 2 + 2 && raw.startsWith('PP')) ? raw.slice(2) : raw;
+  if (body.length !== GROUP * 2) return null;
+  return `PP-${body.slice(0, GROUP)}-${body.slice(GROUP)}`;
 }
 
 function newId() { return `prt_${Date.now().toString(36)}${crypto.randomBytes(4).toString('hex')}`; }
@@ -81,6 +87,41 @@ function init(dataDir) {
     printers = (Array.isArray(raw) ? raw : []).filter(p => p && p.id);
   } catch { /* first run */ }
   rebuildIndex();
+  if (printers.length === 0) seedDefaults();
+}
+
+/* A brand-new install gets two walk-up printers so a code is immediately
+ * printable for testing without any admin setup first: a free workspace copier
+ * and a paid shop (colour + mono per page, INR). Codes are fixed and printed
+ * on the walk-up cards, so they never change between deploys. */
+function seedDefaults() {
+  const demo = [
+    {
+      name: 'Workspace Copier (demo)',
+      note: 'Free walk-up copier. Demo entry — swap its destination for your real queue on the Printers page.',
+      code: 'PTST-4WKS',
+      category: 'workspace',
+      active: true,
+      capabilities: { papers: ['a4', 'letter'], orientations: ['portrait', 'landscape'], duplex: true, color: false },
+      targetId: 'outbox',
+      target: 'outbox',
+    },
+    {
+      name: 'Corner Print Shop (demo)',
+      note: 'Paid shop: colour and black & white per page in INR, checkout before printing. Demo entry.',
+      code: 'PTST-4SHP',
+      category: 'shop',
+      active: true,
+      capabilities: { papers: ['a4', 'letter'], orientations: ['portrait', 'landscape'], duplex: true, color: true },
+      targetId: 'outbox',
+      target: 'outbox',
+      pricing: { currency: 'INR', colorPerPage: 4, monoPerPage: 1.5 },
+    },
+  ];
+  for (const d of demo) {
+    try { create(d); log.info(`seeded demo printer "${d.name}" (${d.code})`); }
+    catch (e) { log.warn(`seed skipped: ${e.message}`); }
+  }
 }
 
 /* ---------------- validation ---------------- */
@@ -179,6 +220,7 @@ function remove(id) {
 /** The public "shallow" view a printer code gives walk-up guests. */
 function publicSheet(p) {
   return {
+    id: p.id,
     code: p.code,
     name: p.name,
     note: p.note || '',
@@ -186,6 +228,7 @@ function publicSheet(p) {
     active: Boolean(p.active),
     capabilities: p.capabilities,
     pricing: p.pricing || null,
+    payable: p.category === 'shop',
   };
 }
 

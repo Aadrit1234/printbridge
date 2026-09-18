@@ -1,9 +1,9 @@
 {
-  "name": "PrintBridge — print from any device",
+  "name": "PrintBridge — print here",
   "short_name": "PrintBridge",
-  "description": "Upload from any phone or laptop, preview exactly what will print, and send it to the printer.",
-  "start_url": "/#/print",
-  "scope": "/",
+  "description": "Enter the code on the printer, send your document, collect it. No app, no account.",
+  "start_url": "/print/",
+  "scope": "/print/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#070b10",
@@ -15,8 +15,6 @@
     { "src": "/assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Print a file", "url": "/#/print" },
-    { "name": "Queue", "url": "/#/queue" },
-    { "name": "Printer settings", "url": "/#/printer" }
+    { "name": "Print a document", "url": "/print/" }
   ]
 }

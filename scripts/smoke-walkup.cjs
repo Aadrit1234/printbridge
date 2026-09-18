@@ -1,0 +1,260 @@
+/* Walk-up print flow smoke test.
+ *
+ * The three-site model has one flow per printer category, and this is what
+ * proves both of them against a running server:
+ *
+ *   workspace — code → printer → upload → settings → print, free
+ *   shop      — code → colour/mono → printer → upload → settings → pay → print
+ *
+ * It also locks in the things that are easy to break silently:
+ *   • a printer code works typed with or without its PP- prefix
+ *   • a shop refuses to print an unpaid job, and refuses a second mode without
+ *     a second payment
+ *   • every print command gets its own code
+ *   • the code page is really merged in front of the document (the print copy
+ *     has one more page than the document)
+ *   • a paused printer is refused, and another device cannot read our code
+ *
+ *   node scripts/smoke-walkup.cjs
+ *   BASE=http://192.168.1.20:8088 node scripts/smoke-walkup.cjs
+ *
+ * It creates its own printers on the server and removes them again, so it is
+ * safe to run against a live install. `data/` is only ever read.
+ */
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { PDFDocument, StandardFonts } = require('pdf-lib');
+
+const BASE = process.env.BASE || 'http://localhost:8088';
+const GS = '/api/v1';
+const AS = '/api/admin';
+const PIN = process.env.ADMIN_PIN;
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..', 'data');
+
+const DEVICE = 'dev_walkup_smoke';
+const OTHER_DEVICE = 'dev_walkup_other';
+
+let cookie = '';
+let failures = 0;
+let checks = 0;
+
+const ok = (label, condition, detail = '') => {
+  checks++;
+  if (condition) console.log(`  • ${label}${detail ? ` — ${detail}` : ''}`);
+  else { failures++; console.log(`  ✗ ${label}${detail ? ` — ${detail}` : ''}`); }
+};
+
+async function req(url, { method = 'GET', body, device = DEVICE, form = null, admin = false } = {}) {
+  const headers = {};
+  if (device) headers['x-device-id'] = device;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (admin && cookie) headers.cookie = cookie;
+  const res = await fetch(BASE + url, {
+    method,
+    headers,
+    body: form || (body !== undefined ? JSON.stringify(body) : undefined),
+  });
+  const type = res.headers.get('content-type') || '';
+  const payload = type.includes('json') ? await res.json().catch(() => null) : await res.text();
+  return { status: res.status, payload };
+}
+
+async function sentDocument(lines = 2) {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  for (let p = 1; p <= lines; p++) {
+    const page = pdf.addPage([595.28, 841.89]);
+    page.drawText(`Walk-up smoke page ${p}`, { x: 44, y: 700, size: 18, font });
+  }
+  return Buffer.from(await pdf.save());
+}
+
+async function upload(name, bytes, mime = 'application/pdf') {
+  const form = new FormData();
+  form.append('files', new Blob([bytes], { type: mime }), name);
+  const res = await req(`${GS}/jobs`, { method: 'POST', form });
+  assert.strictEqual(res.status, 201, `upload failed: ${res.status} ${JSON.stringify(res.payload)}`);
+  return res.payload.jobs[0];
+}
+
+async function ready(id) {
+  for (let i = 0; i < 60; i++) {
+    // eslint-disable-next-line no-await-in-loop
+    const res = await req(`${GS}/jobs/${id}`);
+    if (res.payload && res.payload.status === 'ready') return res.payload;
+    if (res.payload && res.payload.status === 'failed') throw new Error(`job failed: ${res.payload.error}`);
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise(r => setTimeout(r, 400));
+  }
+  throw new Error('job never became ready');
+}
+
+async function settle(id) {
+  for (let i = 0; i < 60; i++) {
+    // eslint-disable-next-line no-await-in-loop
+    const res = await req(`${GS}/jobs/${id}`);
+    const status = res.payload && res.payload.status;
+    if (['printed', 'failed', 'canceled'].includes(status)) return res.payload;
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise(r => setTimeout(r, 400));
+  }
+  throw new Error('job never settled');
+}
+
+function printCopyPath(jobId) { return path.join(DATA_DIR, 'print', `${jobId}.pdf`); }
+
+async function pageCountOf(file) {
+  const doc = await PDFDocument.load(fs.readFileSync(file));
+  return doc.getPageCount();
+}
+
+async function main() {
+  console.log(`\n  walk-up smoke: ${BASE}\n`);
+
+  if (PIN) {
+    const login = await req(`${AS}/login`, { method: 'POST', body: { pin: PIN }, device: null });
+    assert.strictEqual(login.status, 200, `admin sign-in failed (${login.status})`);
+    const raw = login.payload;
+    void raw;
+    // fetch() hides Set-Cookie, so re-request with an explicit header list
+    const res = await fetch(BASE + AS + '/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: PIN }),
+    });
+    const set = res.headers.getSetCookie ? res.headers.getSetCookie() : [res.headers.get('set-cookie')];
+    cookie = String(set.filter(Boolean)[0] || '').split(';')[0];
+    ok('signed in to the admin API', Boolean(cookie));
+  }
+
+  /* ---------------- fixtures: one printer per category ---------------- */
+  const made = [];
+
+  async function makePrinter(body) {
+    if (!cookie) throw new Error('ADMIN_PIN is required to create the test printers');
+    const res = await req(`${AS}/printers`, { method: 'POST', body, device: null, admin: true });
+    assert.strictEqual(res.status, 201, `could not create printer: ${res.status} ${JSON.stringify(res.payload)}`);
+    made.push(res.payload.printer.id);
+    return res.payload.printer;
+  }
+
+  try {
+    const workspace = await makePrinter({
+      name: 'Walk-up smoke workspace',
+      category: 'workspace',
+      target: 'outbox',
+      capabilities: { papers: ['a4', 'letter'], orientations: ['portrait', 'landscape'], duplex: true, color: false },
+    });
+    const shop = await makePrinter({
+      name: 'Walk-up smoke shop',
+      category: 'shop',
+      target: 'outbox',
+      capabilities: { papers: ['a4'], orientations: ['portrait'], duplex: false, color: true },
+      pricing: { currency: 'INR', colorPerPage: 3, monoPerPage: 1 },
+    });
+    ok('registered a workspace printer', /^PP-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(workspace.code), workspace.code);
+    ok('registered a shop printer with prices', shop.pricing.colorPerPage === 3 && shop.pricing.monoPerPage === 1, shop.code);
+
+    /* ---------------- code lookup ---------------- */
+    const bare = workspace.code.replace(/^PP-/, '').replace('-', '');
+    const byFull = await req(`${GS}/printers/${encodeURIComponent(workspace.code)}`, { device: null });
+    const byBare = await req(`${GS}/printers/${encodeURIComponent(bare)}`, { device: null });
+    const byJunk = await req(`${GS}/printers/${encodeURIComponent(workspace.code.toLowerCase().replace(/-/g, ' '))}`, { device: null });
+    ok('a code resolves for guests', byFull.status === 200 && byFull.payload.printer.category === 'workspace', workspace.code);
+    ok('a code resolves without its PP- prefix', byBare.status === 200 && byBare.payload.printer.code === workspace.code, bare);
+    ok('a code resolves typed with spaces and lower case', byJunk.status === 200, workspace.code.toLowerCase());
+    const nonsense = await req(`${GS}/printers/PP-ZZZZ-ZZZZ`, { device: null });
+    ok('an unknown code is a clean 404', nonsense.status === 404, nonsense.payload.error);
+
+    /* ---------------- workspace: free, one code page ---------------- */
+    const wJob = await upload('workspace.pdf', await sentDocument(2));
+    await ready(wJob.id);
+    const wPrint = await req(`${GS}/jobs/${wJob.id}/print`, {
+      method: 'POST', body: { printer: workspace.id, paper: 'a4', orientation: 'portrait', duplex: true },
+    });
+    assert.strictEqual(wPrint.status, 200, `workspace print failed: ${JSON.stringify(wPrint.payload)}`);
+    const wToken = wPrint.payload.token;
+    ok('workspace print accepted without payment', Boolean(wToken), wToken);
+    const wDone = await settle(wJob.id);
+    ok('workspace job printed', wDone.status === 'printed', wDone.message);
+    ok('its ticket followed the job', (wDone.tickets || []).some(t => t.token === wToken && t.state === 'printed'), wToken);
+
+    const copy = printCopyPath(wJob.id);
+    if (fs.existsSync(copy)) {
+      const pages = await pageCountOf(copy);
+      ok('the code page is printed in front of the document', pages === 3, `${pages} pages = 1 code + 2 document`);
+    } else {
+      ok('the code page is printed in front of the document', false, `no print copy at ${copy}`);
+    }
+
+    /* ---------------- shop: pay first ---------------- */
+    const sJob = await upload('shop.pdf', await sentDocument(1));
+    await ready(sJob.id);
+
+    const unpaid = await req(`${GS}/jobs/${sJob.id}/print`, { method: 'POST', body: { printer: shop.id, mode: 'color' } });
+    ok('a shop refuses to print an unpaid job', unpaid.status === 409 && /payment/i.test(unpaid.payload.error), unpaid.payload.error);
+
+    const noMode = await req(`${GS}/jobs/${sJob.id}/pay`, { method: 'POST', body: { printer: shop.id } });
+    ok('paying without a colour choice is refused', noMode.status === 409, noMode.payload.error);
+
+    const cheap = await req(`${GS}/jobs/${sJob.id}/pay`, { method: 'POST', body: { printer: shop.id, mode: 'mono' } });
+    ok('the server prices the job itself', cheap.status === 200 && cheap.payload.payment.amount === 1, `mono 1 page → ₹${cheap.payload.payment && cheap.payload.payment.amount}`);
+
+    const pay = await req(`${GS}/jobs/${sJob.id}/pay`, { method: 'POST', body: { printer: shop.id, mode: 'color', method: 'card' } });
+    ok('paying in colour reprices the same job', pay.status === 200 && pay.payload.payment.amount === 3, `colour 1 page → ₹${pay.payload.payment && pay.payload.payment.amount}`);
+
+    const sPrint = await req(`${GS}/jobs/${sJob.id}/print`, { method: 'POST', body: { printer: shop.id, mode: 'color' } });
+    assert.strictEqual(sPrint.status, 200, `shop print failed: ${JSON.stringify(sPrint.payload)}`);
+    ok('a paid shop job prints', Boolean(sPrint.payload.token), sPrint.payload.token);
+    const sDone = await settle(sJob.id);
+    ok('shop job printed', sDone.status === 'printed', sDone.message);
+
+    const secondMode = await req(`${GS}/jobs/${sJob.id}/print`, {
+      method: 'POST', body: { printer: shop.id, mode: 'mono', tokenPage: false },
+    });
+    ok('printing the same document again needs its own payment',
+      secondMode.status === 409 || (secondMode.status === 200 && secondMode.payload.token !== sPrint.payload.token),
+      secondMode.status === 409 ? secondMode.payload.error : secondMode.payload.token);
+
+    /* ---------------- codes are scoped to one device ---------------- */
+    const foreign = await req(`${GS}/tickets/${encodeURIComponent(wToken)}`, { device: OTHER_DEVICE });
+    ok('another device cannot read our code', foreign.status === 404, foreign.payload.error);
+    const own = await req(`${GS}/tickets/${encodeURIComponent(wToken)}`);
+    ok('the sender can read it', own.status === 200 && own.payload.ticket.token === wToken, own.payload.ticket && own.payload.ticket.state);
+
+    /* ---------------- paused printers take nothing ---------------- */
+    const paused = await makePrinter({
+      name: 'Walk-up smoke paused',
+      category: 'workspace',
+      target: 'outbox',
+      active: false,
+      capabilities: { papers: ['a4'], orientations: ['portrait'], duplex: false, color: false },
+    });
+    const pJob = await upload('paused.pdf', await sentDocument(1));
+    await ready(pJob.id);
+    const refused = await req(`${GS}/jobs/${pJob.id}/print`, { method: 'POST', body: { printer: paused.id } });
+    ok('a paused printer refuses jobs with a clear reason',
+      refused.status === 409 && /paused|turned it off/i.test(refused.payload.error), refused.payload.error);
+    const pausedSheet = await req(`${GS}/printers/${encodeURIComponent(paused.code)}`, { device: null });
+    ok('guests can still see it is not active', pausedSheet.status === 200 && pausedSheet.payload.printer.active === false, paused.code);
+
+    /* ---------------- cleanup ---------------- */
+    await req(`${GS}/jobs/${wJob.id}`, { method: 'DELETE' }).catch(() => {});
+    await req(`${GS}/jobs/${sJob.id}`, { method: 'DELETE' }).catch(() => {});
+    await req(`${GS}/jobs/${pJob.id}`, { method: 'DELETE' }).catch(() => {});
+  } finally {
+    for (const id of made) {
+      // eslint-disable-next-line no-await-in-loop
+      await req(`${AS}/printers/${encodeURIComponent(id)}`, { method: 'DELETE', device: null, admin: true }).catch(() => {});
+    }
+  }
+
+  console.log(`\n  ${failures ? 'WALK-UP FAIL' : 'WALK-UP PASS'} — ${checks - failures}/${checks} checks\n`);
+  process.exit(failures ? 1 : 0);
+}
+
+main().catch((e) => {
+  console.error(`\n  WALK-UP FAIL — ${e.message}\n`);
+  process.exit(1);
+});

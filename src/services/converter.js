@@ -9,6 +9,7 @@ const sharp = require('sharp');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const log = require('../logger').make('converter');
 const render = require('./render');
+const { winAnsiSafe } = require('./pdf-text');
 
 const PAGE_W = 595.28; // A4
 const PAGE_H = 841.89;
@@ -61,40 +62,6 @@ async function imageToPdf(buffer) {
 }
 
 /* ---------------- plain text ---------------- */
-
-/*
- * pdf-lib's standard fonts are WinAnsi-encoded, and serialising a character
- * outside that set throws — which used to fail the whole job on a document
- * containing an em dash, a curly quote, an arrow or an accent. Real text files
- * from a real person are full of those, so transliterate the common ones to
- * their ASCII meaning and leave anything else as a plain "?": slightly lossy
- * printing beats a document that refuses to print.
- */
-const WINANSI_FALLBACK = new Map(Object.entries({
-  '\u2018': "'", '\u2019': "'", '\u201A': ',', '\u201B': "'",
-  '\u201C': '"', '\u201D': '"', '\u201E': '"', '\u201F': '"',
-  '\u2013': '-', '\u2014': '--', '\u2015': '--', '\u2212': '-', '\u2010': '-', '\u2011': '-',
-  '\u2026': '...', '\u2022': '*', '\u2039': '<', '\u203A': '>', '\u00AB': '<<', '\u00BB': '>>',
-  '\u2192': '->', '\u2190': '<-', '\u21D2': '=>', '\u21D0': '<=', '\u2032': "'", '\u2033': '"',
-  '\u20AC': 'EUR', '\u00A3': 'GBP', '\u00A5': 'JPY', '\u00A9': '(c)', '\u00AE': '(R)', '\u2122': '(TM)',
-  '\u00A0': ' ', '\u2007': ' ', '\u202F': ' ', '\u2009': ' ', '\u200A': ' ', '\u2002': ' ', '\u2003': ' ',
-  '\u200B': '', '\u200C': '', '\u200D': '', '\uFEFF': '', '\u00AD': '-', '\u00B7': '*', '\u2022': '*',
-}));
-
-/** Fold a string into what a standard PDF font can actually encode. */
-function winAnsiSafe(value) {
-  let out = '';
-  for (const char of String(value)) {
-    const code = char.codePointAt(0);
-    if (code < 0x80) { out += char; continue; }
-    const mapped = WINANSI_FALLBACK.get(char);
-    if (mapped !== undefined) { out += mapped; continue; }
-    // Latin-1 letters pinyin and friends: WinAnsi covers 0xA0–0xFF directly.
-    if (code >= 0xA0 && code <= 0xFF) { out += char; continue; }
-    out += '?';
-  }
-  return out;
-}
 
 async function textToPdf(buffer, name) {
   const text = winAnsiSafe(buffer.toString('utf8').replace(/\r\n?/g, '\n'));
