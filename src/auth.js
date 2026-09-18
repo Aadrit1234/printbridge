@@ -16,6 +16,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const config = require('./config');
+const cookies = require('./cookies');
+const accounts = require('./services/accounts');
 const log = require('./logger').make('auth');
 
 const COOKIE = 'pb_admin';
@@ -38,17 +40,7 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(ba, bb);
 }
 
-function parseCookies(header) {
-  const out = {};
-  for (const part of String(header || '').split(';')) {
-    const i = part.indexOf('=');
-    if (i < 0) continue;
-    const k = part.slice(0, i).trim();
-    const v = part.slice(i + 1).trim();
-    if (k) out[k] = decodeURIComponent(v);
-  }
-  return out;
-}
+const parseCookies = cookies.parse;
 
 class Auth {
   constructor() {
@@ -223,48 +215,70 @@ class Auth {
    * HTTPS. That is a deliberate, configured trade-off, not an accident.
    */
   cookieFor(req, token, days) {
-    const secure = req.secure || String(req.headers['x-forwarded-proto'] || '').includes('https');
-    const crossSite = Boolean(req.crossSite);
-    return [
-      `${COOKIE}=${token}`,
-      'Path=/',
-      'HttpOnly',
-      crossSite ? 'SameSite=None' : 'SameSite=Strict',
-      `Max-Age=${days * 86400}`,
-      secure || crossSite ? 'Secure' : '',
-    ].filter(Boolean).join('; ');
+    return cookies.build(COOKIE, token, { req, days });
   }
 
   clearCookie(req = null) {
-    const sameSite = req && req.crossSite ? 'SameSite=None; Secure' : 'SameSite=Strict';
-    return `${COOKIE}=; Path=/; HttpOnly; ${sameSite}; Max-Age=0`;
+    return cookies.clear(COOKIE, req);
   }
 
   /* ---------------- gate ---------------- */
 
   protected() { return config.get('adminProtect') !== false; }
 
+  /**
+   * The account behind this request, if any.
+   *
+   * Two kinds of session open the control room: the machine PIN (whoever set
+   * this server up — the whole machine) and an owner account (one customer,
+   * scoped to their own printers). `req.scope` is how a route tells them
+   * apart: null means "the whole machine", an accountId means "only theirs".
+   */
+  accountSession(req) {
+    const session = accounts.sessionFrom(req);
+    if (!session) return null;
+    const account = accounts.get(session.accountId);
+    if (!account || account.status !== 'active') return null;
+    return { session, account };
+  }
+
   /** Express middleware: everything mounted behind it needs a live session. */
   requireAdmin() {
     return (req, res, next) => {
-      if (!this.protected()) { req.admin = { open: true }; return next(); }
+      if (!this.protected()) { req.admin = { open: true }; req.scope = null; return next(); }
+
       const session = this.sessionFrom(req);
-      if (!session) return res.status(401).json({ error: 'Admin sign-in required', auth: 'required' });
-      req.admin = session;
-      return next();
+      if (session) {
+        req.admin = { type: 'machine', ...session };
+        req.scope = null;
+        return next();
+      }
+
+      const own = this.accountSession(req);
+      if (own) {
+        req.admin = { type: 'account', accountId: own.account.id, email: own.account.email, name: own.account.name };
+        req.scope = { accountId: own.account.id };
+        return next();
+      }
+
+      return res.status(401).json({ error: 'Admin sign-in required', auth: 'required' });
     };
   }
 
   status(req) {
     const session = this.protected() ? this.sessionFrom(req) : null;
+    const own = session || !this.protected() ? null : this.accountSession(req);
     return {
       protected: this.protected(),
-      authenticated: !this.protected() || Boolean(session),
+      authenticated: !this.protected() || Boolean(session) || Boolean(own),
       open: !this.protected(),
       expiresAt: session ? new Date(session.expiresAt).toISOString() : null,
       sessionDays: this.sessionDays(),
       updatedAt: this.updatedAt,
       cookieName: COOKIE,
+      /* Who is actually signed in: the machine, one account, or nobody. */
+      via: session ? 'pin' : own ? 'account' : null,
+      account: own ? accounts.view(own.account) : null,
     };
   }
 }

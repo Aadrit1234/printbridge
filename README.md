@@ -7,10 +7,11 @@ printer, no app to install.**
 |---|---|---|
 | **Main site** | `/` | the company — about, product, features, pricing, contact — with two buttons: **Print** and **Log in** |
 | **Print site** | `/print` | whoever is standing at the printer: enter a printer code, send a document, get a **token number** |
-| **Admin site** | `/admin` | the owner, behind a PIN: the printer, every job, every code, prices, storage, access |
+| **Owner site** | `/owner` | the customer: redeem the access code from their licence email, sign in, see their licence |
+| **Admin site** | `/admin` | the console: the printer, every job, every code, prices, storage, access |
 
-The admin site exists **only on the machine that runs the server** — the one
-cabled (or Wi-Fi’d) to the printer. The two public sites can also be hosted
+The owner site and the admin site exist **only on the machine that runs the
+server** — the one cabled (or Wi-Fi’d) to the printer. The two public sites can also be hosted
 statically (Vercel, Netlify) while the backend stays home. See
 **[docs/deploy.md](docs/deploy.md)**.
 
@@ -106,6 +107,51 @@ text/CSV/Markdown — plus Word/Excel/PowerPoint when LibreOffice is present
 (detected automatically). A file that claims to be a PDF but carries no PDF
 content is refused rather than sent to the printer.
 
+## Accounts, licences and access codes
+
+PrintBridge is multi-tenant: a customer is an **account**, and an account only
+ever comes into existence by **redeeming an access code**.
+
+```
+  you (vendor)                the customer                 this server
+  ┌──────────────┐          ┌────────────────┐          ┌──────────────────┐
+  │ POST /codes  │─ email ─▶│  /owner        │─────────▶│ redeem once,     │
+  │ for a plan   │  AC-7K4Q │  code + email  │  HTTP    │ create account,  │
+  └──────────────┘  -2M9D   │  + password    │          │ issue session    │
+                            └────────────────┘          └──────────────────┘
+```
+
+There is deliberately **no sign-up that skips the code**. A code carries the
+plan that was paid for (the account inherits it, never the request), it can be
+redeemed exactly once, and it can be bound to one address so a code mailed to
+somebody only works for them. A code handed to a different address, or reused,
+or expired, or revoked, is refused with a reason.
+
+| Plan id | What it is | Price |
+|---|---|---|
+| `workspace-lifetime` | Workspace, one payment | ₹9,999 |
+| `shop-yearly` | Shop, per year | ₹499 |
+| `shop-lifetime` | Shop, one payment | ₹5,999 |
+
+Issuing a code is the **operator key's** job — yours as the vendor, not a
+customer's. It comes from `OPERATOR_KEY` in `.env` (16+ characters, no default
+and no first-run generation, because a guessable vendor key would be worse than
+none). With it unset the desk is closed and no code can be minted:
+
+```bash
+# mint a shop licence bound to one address, valid for 30 days
+curl -X POST http://localhost:8088/api/owner/codes \
+  -H "x-operator-key: $OPERATOR_KEY" -H 'Content-Type: application/json' \
+  -d '{"plan":"shop-lifetime","email":"buyer@example.com","days":30}'
+# → {"code":{"code":"AC-7K4Q-2M9D-X3TB", …}}
+```
+
+**What an account can see.** The machine's PIN opens the whole machine — every
+printer, including the seeded demos. An account session opens *only its own*
+printers: another account's printer answers 404, not 403, because its existence
+is not that customer's business. A patch cannot reassign a printer out of the
+account that owns it either. Both are covered by `npm run smoke:accounts`.
+
 ## Print codes & printers
 
 A **printer code** (`PP-7K4Q-2M9D`) belongs to a walk-up printer. It is safe to
@@ -158,6 +204,7 @@ Environment variables (or a `.env`):
 | `DATA_DIR` | `./data` | uploads, PDFs, previews, `jobs.json`, `printers.json`, `access.json` |
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `ADMIN_PIN` | — | sets the PIN on first run (when `data/access.json` is absent) |
+| `OPERATOR_KEY` | — | the vendor's key for minting access codes (`POST /api/owner/codes`). 16+ characters. Unset = the code desk is closed |
 | `ALLOWED_ORIGINS` | — | comma-separated origins allowed to call the API from another site. Unset means same-origin only. Once set, a cross-site request from any *other* origin is refused with 403 — not merely hidden from the browser |
 
 Everything else lives in Admin → Settings and is persisted to `data/config.json`
@@ -172,6 +219,7 @@ upload limit, preview page limit, keep-alive interval, retry window,
 | `npm run check` | syntax-check every source file (server, `src/`, scripts and the front-end) |
 | `npm run smoke` | end-to-end guest pipeline + auth + isolation |
 | `npm run smoke:walkup` | both guest flows (workspace and shop), codes, checkout, code page |
+| `npm run smoke:accounts` | access codes, account signup/login, per-account printer scoping |
 | `npm run smoke:ipp` | Wi-Fi/IPP end-to-end against a simulated network printer |
 | `npm run fake-printer` | stand up that simulated printer on `127.0.0.1:8631` |
 | `npm run build:web` | build the static bundle for Vercel/Netlify (`PRINTBRIDGE_API_URL=…`) |
@@ -181,6 +229,7 @@ upload limit, preview page limit, keep-alive interval, retry window,
 npm run smoke                                   # guest surface only
 ADMIN_PIN=123456 npm run smoke                  # + admin API, sign-in, isolation
 ADMIN_PIN=123456 npm run smoke:walkup           # the walk-up flows (needs the PIN)
+OPERATOR_KEY=… ADMIN_PIN=123456 npm run smoke:accounts   # licences and accounts
 ```
 
 ## API

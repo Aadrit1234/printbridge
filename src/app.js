@@ -38,10 +38,15 @@ function createApp({ publicDir, lanUrl, lanAddresses = [] }) {
 
   app.use(express.json({ limit: '256kb' }));
 
-  // Two surfaces, on purpose:
+  // Four surfaces, on purpose:
   //   /api/v1     guest — upload, preview, print, own jobs only
-  //   /api/admin  control room — every job, printer setup, defaults, storage
+  //   /api/owner  the customer: redeem an access code, sign in, own account,
+  //               and (with the vendor's operator key) mint the codes
+  //   /api/admin  control room — every job, printer setup, defaults, storage.
+  //               The machine PIN sees the whole machine; an owner account sees
+  //               only its own printers (req.scope)
   app.use('/api/v1', require('./routes/guest'));
+  app.use('/api/owner', require('./routes/owner'));
   app.use('/api/admin', require('./routes/admin'));
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Unknown API endpoint' }));

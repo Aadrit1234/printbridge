@@ -58,12 +58,17 @@ if (apiBase && !/^https?:\/\/[^/\s]+$/.test(apiBase)) {
 }
 /* ---------------- copy ---------------- */
 
+/* Surfaces that must never leave the machine running the server:
+ *   admin/  the control room — every job, every printer, the machine itself
+ *   owner/  the customer's console, which signs in with a same-origin cookie
+ * Neither can be trusted from a static host, and both are more at home next to
+ * the printer. The bundle is the public site: main + print. */
+const PRIVATE = new Set(['admin', 'owner']);
+
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.cpSync(SRC, OUT, {
   recursive: true,
-  // The guest site only. Nothing in this bundle can reach the console, and the
-  // console is not on this host to be fetched in the first place.
-  filter: (source) => path.basename(source) !== 'admin',
+  filter: (source) => !PRIVATE.has(path.basename(source)),
 });
 
 /* ---------------- runtime config ---------------- */
@@ -88,6 +93,7 @@ fs.writeFileSync(path.join(OUT, 'deployment.json'), JSON.stringify({
   apiBase: apiBase || '(same origin as this page)',
   adminBase: adminBase || '(same origin as this page)',
   includesAdmin: false,
+  includesOwner: false,
   version: require(path.join(ROOT, 'package.json')).version,
 }, null, 2) + '\n');
 
@@ -107,7 +113,7 @@ console.log('  frontend bundle built');
 console.log(`  output      ${path.relative(ROOT, OUT)} (${files.length} files)`);
 console.log(`  apiBase     ${apiBase || '(same origin as this page)'}`);
 console.log(`  adminBase   ${adminBase || '(same origin as this page)'}`);
-console.log('  admin       not included (the console lives on the print server)');
+console.log('  private     admin/ and owner/ excluded (they live on the print server)');
 console.log('');
 console.log('  Remember to allow this site on the backend:');
 console.log(`    ALLOWED_ORIGINS=https://<this-site's-domain>`);

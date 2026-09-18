@@ -7,7 +7,9 @@
   "cleanUrls": false,
   "rewrites": [
     { "source": "/print", "destination": "/print/index.html" },
-    { "source": "/print/", "destination": "/print/index.html" }
+    { "source": "/print/", "destination": "/print/index.html" },
+    { "source": "/owner", "destination": "/index.html" },
+    { "source": "/admin", "destination": "/index.html" }
   ],
   "headers": [
     {

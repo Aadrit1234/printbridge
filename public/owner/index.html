@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070b10">
+<meta name="robots" content="noindex, nofollow">
+<title>PrintBridge — Owner sign in</title>
+<link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
+<link rel="apple-touch-icon" href="/assets/icon-192.png">
+<link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="./owner.css">
+<script src="/config.js"></script>
+<script>
+  /* The shared theme choice, applied before the first paint. */
+  (function () {
+    try {
+      var saved = localStorage.getItem('pb.theme');
+      var want = saved === 'dark' ? 'dark' : saved === 'light' ? 'light'
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', want);
+    } catch (e) { /* private mode — the default stands */ }
+  })();
+</script>
+</head>
+<body>
+
+<div class="owner">
+  <header class="owner-top">
+    <a class="brand" href="/">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 8V4h12v4"/><rect x="3" y="8" width="18" height="8" rx="2.4"/>
+          <path d="M6.5 12h5"/><path d="M17.5 12v.01"/><path d="M9 16h6"/>
+        </svg>
+      </span>
+      <span class="brand-words"><strong>PrintBridge</strong><em>owner console</em></span>
+    </a>
+    <div class="row">
+      <a class="btn ghost" href="/print">Print a document</a>
+      <button class="btn ghost icon-only" id="theme-toggle" type="button" aria-label="Switch between light and dark" title="Switch between light and dark">
+        <span id="theme-glyph" aria-hidden="true"></span>
+      </button>
+    </div>
+  </header>
+
+  <main class="owner-main">
+
+    <!-- ---------------------------------------------- signed out -->
+    <section class="card" id="signed-out">
+      <div class="card-head">
+        <h1 id="gate-title">Create your account</h1>
+      </div>
+      <p class="muted small" id="gate-sub">Your licence email contains an access code. It is the only thing that can create an account here — there is no sign-up that skips it.</p>
+
+      <div class="tabs" id="gate-tabs" role="tablist">
+        <button class="active" type="button" data-tab="signup" role="tab">I have an access code</button>
+        <button type="button" data-tab="login" role="tab">I already have an account</button>
+      </div>
+
+      <!-- sign up -->
+      <div class="tabpane" id="pane-signup">
+        <label class="field">
+          <span>Access code</span>
+          <input class="input mono" id="su-code" placeholder="AC-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" autocapitalize="characters">
+        </label>
+        <label class="field">
+          <span>Your name</span>
+          <input class="input" id="su-name" placeholder="Who is this account for?" autocomplete="name">
+        </label>
+        <label class="field">
+          <span>Email</span>
+          <input class="input" id="su-email" type="email" placeholder="you@example.com" autocomplete="email">
+        </label>
+        <label class="field">
+          <span>Choose a password</span>
+          <input class="input" id="su-password" type="password" placeholder="At least 8 characters" autocomplete="new-password">
+        </label>
+        <button class="btn primary wide" id="su-go" type="button">Create my account</button>
+      </div>
+
+      <!-- sign in -->
+      <div class="tabpane" id="pane-login" hidden>
+        <label class="field">
+          <span>Email</span>
+          <input class="input" id="li-email" type="email" placeholder="you@example.com" autocomplete="email">
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input class="input" id="li-password" type="password" placeholder="Your password" autocomplete="current-password">
+        </label>
+        <button class="btn primary wide" id="li-go" type="button">Sign in</button>
+      </div>
+
+      <p class="note" id="gate-msg" hidden></p>
+    </section>
+
+    <!-- ---------------------------------------------- signed in -->
+    <section class="card" id="signed-in" hidden>
+      <div class="card-head">
+        <span class="chip ready">Signed in</span>
+        <h1 id="ac-name">Your account</h1>
+      </div>
+      <div class="rows">
+        <div class="line"><span>Email</span><b id="ac-email">—</b></div>
+        <div class="line"><span>Licence</span><b id="ac-plan">—</b></div>
+        <div class="line"><span>Status</span><b id="ac-status">—</b></div>
+      </div>
+      <p class="muted small" id="ac-hint">Your printers live in the console. Plug a printer into this machine and it is set up and given a code for you.</p>
+      <div class="row wrap" style="margin-top:14px">
+        <a class="btn primary" href="/admin">Open your console</a>
+        <button class="btn ghost" id="sign-out" type="button">Sign out</button>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------- plans -->
+    <aside class="card" id="plans">
+      <div class="card-head"><h2>Licences</h2></div>
+      <p class="muted small">A code is bound to the licence that was bought. What you paste above decides what you get — nothing here changes it.</p>
+      <div class="rows" id="plan-rows"></div>
+    </aside>
+
+  </main>
+
+  <footer class="owner-foot">
+    <span>PrintBridge · access codes are single-use and only create an account.</span>
+  </footer>
+</div>
+
+<script type="module" src="./owner.js"></script>
+</body>
+</html>

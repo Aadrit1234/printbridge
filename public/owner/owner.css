@@ -1,0 +1,79 @@
+/* The owner console is part of the product, so it wears the same design system
+ * (assets/app.css) and only adds its own layout here. */
+
+.owner {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 980px);
+  margin: 0 auto;
+  padding: 14px 16px 48px;
+}
+
+.owner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 6px 0 22px;
+}
+
+.owner-top .brand { display: inline-flex; align-items: center; gap: 11px; }
+.owner-top .brand-mark {
+  width: 42px; height: 42px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 14px;
+  color: var(--accent-ink);
+  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+}
+.owner-top .brand-mark svg { width: 22px; height: 22px; }
+.owner-top .brand-words { display: flex; flex-direction: column; line-height: 1.2; }
+.owner-top .brand-words strong { font-size: 1rem; }
+.owner-top .brand-words em { font-style: normal; font-size: 0.72rem; color: var(--muted); }
+.owner-top .icon-only { width: 40px; padding: 0; justify-content: center; }
+.owner-top .icon-only svg { width: 19px; height: 19px; }
+
+.owner-main { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 880px) {
+  .owner-main { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
+}
+
+.owner .card { padding: 22px; }
+.owner .card-head h1 { font-size: 1.32rem; }
+.owner .card-head h2 { font-size: 1rem; }
+.owner .card-head { margin-bottom: 12px; }
+
+/* tabs sit inside the card and switch the pane below (app.css styles the
+ * buttons themselves; only the spacing is ours) */
+.owner .tabs { margin: 16px 0 18px; }
+.owner .tabpane { display: flex; flex-direction: column; gap: 14px; }
+.owner .tabpane[hidden] { display: none; }
+.owner .field { display: flex; flex-direction: column; gap: 7px; }
+.owner .field > span { font-size: 0.74rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.owner .input { width: 100%; }
+.owner #su-code { letter-spacing: 0.14em; text-transform: uppercase; }
+.owner .btn.wide { width: 100%; justify-content: center; }
+
+.owner .rows { display: flex; flex-direction: column; }
+.owner .line {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+}
+.owner .line:last-child { border-bottom: 0; }
+.owner .line > span { color: var(--muted); }
+.owner .line b { font-weight: 600; }
+.owner .line b.mono { font-family: var(--font-mono); letter-spacing: 0.06em; }
+
+.owner .note { margin-top: 16px; }
+.owner .note.bad { border-color: color-mix(in srgb, var(--failed) 45%, transparent); color: var(--failed); }
+.owner .note.ok { border-color: color-mix(in srgb, var(--ready) 45%, transparent); color: var(--ready); }
+
+.owner-foot {
+  margin-top: 26px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 0.78rem;
+  color: var(--muted);
+}

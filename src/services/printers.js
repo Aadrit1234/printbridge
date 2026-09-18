@@ -147,6 +147,11 @@ function sanitize(input) {
     },
     targetId: p.targetId ? String(p.targetId).slice(0, 120) : null,
     target: String(p.target || p.targetId || '').trim().slice(0, 300) || null,
+    /* Which customer this printer belongs to. Null means it belongs to the
+     * machine itself — the demo entries on a fresh install, and anything the
+     * operator set up before accounts existed. An owner account only ever sees
+     * printers carrying its own id. */
+    accountId: p.accountId ? String(p.accountId).slice(0, 60) : null,
     pricing: null,
   };
   if (!out.name) throw new Error('Give this printer a name');

@@ -1,16 +1,17 @@
 {
   "name": "printbridge",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Self-hosted print infrastructure: a main site, a walk-up print site with printer codes and token numbers, and an admin console — over a USB Windows queue, IPP/AirPrint, or CUPS.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "build:web": "node scripts/build-web.cjs",
-    "check": "node --check server.js && node --check src/app.js && node --check src/cors.js && node --check src/config.js && node --check src/logger.js && node --check src/storage.js && node --check src/events.js && node --check src/routes/jobs.js && node --check src/routes/files.js && node --check src/routes/printer.js && node --check src/routes/system.js && node --check src/services/queue.js && node --check src/services/tickets.js && node --check src/services/converter.js && node --check src/services/rasterizer.js && node --check src/services/render.js && node --check src/services/pdf-text.js && node --check src/services/printers.js && node --check src/services/discovery.js && node --check src/services/watchdog.js && node --check src/services/backends/registry.js && node --check src/services/backends/spooler.js && node --check src/services/backends/ipp.js && node --check src/services/backends/cups.js && node --check src/services/backends/outbox.js && node --check src/services/tools/windows.js && node --check scripts/fake-printer.cjs && node --check scripts/smoke-ipp.cjs && node --check scripts/smoke-walkup.cjs && node --check scripts/build-web.cjs && node --check public/site.js && node --check public/print/print.js && node --check public/sw.js",
+    "check": "node --check server.js && node --check src/app.js && node --check src/cors.js && node --check src/cookies.js && node --check src/config.js && node --check src/logger.js && node --check src/storage.js && node --check src/events.js && node --check src/routes/jobs.js && node --check src/routes/files.js && node --check src/routes/printer.js && node --check src/routes/system.js && node --check src/routes/owner.js && node --check src/services/queue.js && node --check src/services/tickets.js && node --check src/services/converter.js && node --check src/services/rasterizer.js && node --check src/services/render.js && node --check src/services/pdf-text.js && node --check src/services/printers.js && node --check src/services/access-codes.js && node --check src/services/accounts.js && node --check src/services/discovery.js && node --check src/services/watchdog.js && node --check src/services/backends/registry.js && node --check src/services/backends/spooler.js && node --check src/services/backends/ipp.js && node --check src/services/backends/cups.js && node --check src/services/backends/outbox.js && node --check src/services/tools/windows.js && node --check scripts/fake-printer.cjs && node --check scripts/smoke-ipp.cjs && node --check scripts/smoke-walkup.cjs && node --check scripts/smoke-accounts.cjs && node --check scripts/build-web.cjs && node --check public/site.js && node --check public/print/print.js && node --check public/sw.js",
     "smoke": "node scripts/smoke.cjs",
     "smoke:ipp": "node scripts/smoke-ipp.cjs",
     "smoke:walkup": "node scripts/smoke-walkup.cjs",
+    "smoke:accounts": "node scripts/smoke-accounts.cjs",
     "fake-printer": "node scripts/fake-printer.cjs",
     "icons": "node scripts/make-icons.cjs"
   },

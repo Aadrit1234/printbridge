@@ -70,6 +70,7 @@ function banner(baseUrl, extra) {
       `  Main site    ${baseUrl}          (about · product · pricing · contact)`,
       `  Print site   ${printUrl}          (what the QR points at)`,
       `  Admin site   ${extra.admin.url}`,
+      `  Owner site   ${baseUrl}/owner          (sign in with your access code)`,
       ...(extra.walkUp && extra.walkUp.length
         ? ['', '  Walk-up printer codes (enter these on the print site):',
            ...extra.walkUp.map(p => `    ${p.code}   ${p.name} · ${p.category}${p.active === false ? ' (paused)' : ''}`)]
@@ -77,6 +78,14 @@ function banner(baseUrl, extra) {
       extra.admin.pin
         ? `  Admin PIN    ${extra.admin.pin}    (first run — change it in Admin → Access)`
         : '  Admin PIN    as you set it (Admin → Access to change)',
+      '',
+      '  Owners sign in at /owner with the access code from their licence email.',
+      extra.operator
+        ? '  Operator key set — you can issue access codes from the code desk.'
+        : '  Operator key   not set — no access codes can be issued (set OPERATOR_KEY in .env).',
+      extra.owners
+        ? `  Accounts     ${extra.owners} owner account(s) on this install`
+        : '  Accounts     none yet — an account is created when a code is redeemed',
       '',
       `  Print path   ${extra.backend}`,
       `  Reason       ${extra.reason}`,
@@ -100,6 +109,10 @@ async function main() {
   const auth = require('./src/auth');
   config.init(DATA_DIR);
   storage.init(DATA_DIR);
+  /* Codes before accounts: an account can only be created from a redeemed
+   * access code, so the code store has to know the plans first. */
+  require('./src/services/access-codes').init(DATA_DIR);
+  require('./src/services/accounts').init(DATA_DIR);
   auth.init(DATA_DIR);
   require('./src/services/printers').init(DATA_DIR);
   logger.setLevel(process.env.LOG_LEVEL || 'info');
@@ -124,6 +137,8 @@ async function main() {
       reason: snapshot ? snapshot.reason : '',
       dataDir: DATA_DIR,
       admin: { url: `${lanUrl}/admin`, pin: auth.generatedPin },
+      operator: Boolean(String(process.env.OPERATOR_KEY || '').trim().length >= 16),
+      owners: require('./src/services/accounts').all().length,
       walkUp: require('./src/services/printers').all(),
     });
     if (snapshot && snapshot.state.detail) log.info(`printer detail: ${snapshot.state.detail}`);

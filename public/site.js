@@ -17,20 +17,21 @@
      Where the control room lives
      ----------------------------------------------------------
      This site is often hosted somewhere other than the machine that runs the
-     printer (Vercel, for instance), and the admin console only exists on that
-     machine. config.js names it; the Admin button follows. */
+     printer (Vercel, for instance), and the console only exists on that
+     machine. config.js names it; the Log in button follows. */
   var CFG = window.PRINTBRIDGE_CONFIG || {};
   var ADMIN_BASE = String(CFG.adminBase || "").replace(/\/+$/, "");
   if (ADMIN_BASE) {
-    var adminLinks = document.querySelectorAll('a[href^="/admin"]');
-    for (var a = 0; a < adminLinks.length; a++) {
-      adminLinks[a].setAttribute("href", ADMIN_BASE + adminLinks[a].getAttribute("href"));
-      adminLinks[a].setAttribute("rel", "noopener");
+    var gatedLinks = document.querySelectorAll('a[href^="/owner"], a[href^="/admin"]');
+    for (var a = 0; a < gatedLinks.length; a++) {
+      gatedLinks[a].setAttribute("href", ADMIN_BASE + gatedLinks[a].getAttribute("href"));
+      gatedLinks[a].setAttribute("rel", "noopener");
     }
-    // A static host has no /admin, and most of them answer with this page. Send
-    // anyone who asked for the console to the machine that actually has it.
-    if (/^\/admin(\/|$)/.test(location.pathname)) {
-      location.replace(ADMIN_BASE + "/admin/");
+    // A static host has no /owner or /admin, and most of them answer with this
+    // page. Send anyone who asked for a console to the machine that has it.
+    var wantsOwner = /^\/owner(\/|$)/.test(location.pathname);
+    if (wantsOwner || /^\/admin(\/|$)/.test(location.pathname)) {
+      location.replace(ADMIN_BASE + (wantsOwner ? "/owner/" : "/admin/"));
     }
   }
 
