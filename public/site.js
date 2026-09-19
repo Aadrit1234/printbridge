@@ -17,21 +17,29 @@
      Where the control room lives
      ----------------------------------------------------------
      This site is often hosted somewhere other than the machine that runs the
-     printer (Vercel, for instance), and the console only exists on that
-     machine. config.js names it; the Log in button follows. */
+     printer (Vercel, for instance), and the owner console only exists on that
+     machine. config.js names it; the Log in button follows.
+
+     The machine console is a different story: it is part of the desktop app and
+     has no URL at all, here or there. */
   var CFG = window.PRINTBRIDGE_CONFIG || {};
   var ADMIN_BASE = String(CFG.adminBase || "").replace(/\/+$/, "");
   if (ADMIN_BASE) {
-    var gatedLinks = document.querySelectorAll('a[href^="/owner"], a[href^="/admin"]');
+    var gatedLinks = document.querySelectorAll('a[href^="/owner"]');
     for (var a = 0; a < gatedLinks.length; a++) {
       gatedLinks[a].setAttribute("href", ADMIN_BASE + gatedLinks[a].getAttribute("href"));
       gatedLinks[a].setAttribute("rel", "noopener");
     }
-    // A static host has no /owner or /admin, and most of them answer with this
-    // page. Send anyone who asked for a console to the machine that has it.
-    var wantsOwner = /^\/owner(\/|$)/.test(location.pathname);
-    if (wantsOwner || /^\/admin(\/|$)/.test(location.pathname)) {
-      location.replace(ADMIN_BASE + (wantsOwner ? "/owner/" : "/admin/"));
+    // A static host has no /owner, and most of them answer with this page.
+    // Send anyone who asked for it to the machine that has it.
+    if (/^\/owner(\/|$)/.test(location.pathname)) {
+      location.replace(ADMIN_BASE + "/owner/");
+    }
+    // /admin was the old control room. It does not exist on any host any more —
+    // but it may be bookmarked, so hand those visitors the page that says where
+    // the console went instead of a homepage that pretends nothing happened.
+    if (/^\/admin(\/|$)/.test(location.pathname)) {
+      location.replace(ADMIN_BASE + "/admin");
     }
   }
 
@@ -146,7 +154,8 @@
       reveals[i].classList.add("revealed");
       reveals[i].style.transition = "none";
       reveals[i].style.opacity = "1";
-      reveals[i].style.transform = "none";
+      // No inline transform: `.revealed` already clears it in CSS, and an inline
+      // "none" would also flatten anything that tilts (the hero ticket does).
     }
 
     // The count-ups drive off rAF as well, so land them on their real values.
@@ -186,14 +195,20 @@
     var target = parseFloat(el.getAttribute("data-count"));
     var dur = 1500;
     var start = null;
+    /* The unit rides in a <small> after the number ("25 MB"), so the count-up
+       writes into the leading text node instead of clobbering the whole cell. */
+    var lead = el.firstChild && el.firstChild.nodeType === 3 ? el.firstChild : null;
     function fmt(v) {
       return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
-    if (reduce.matches) { el.textContent = fmt(target); return; }
+    function paint(v) {
+      if (lead) lead.nodeValue = fmt(v); else el.textContent = fmt(v);
+    }
+    if (reduce.matches) { paint(target); return; }
     function frame(ts) {
       if (!start) start = ts;
       var p = Math.min((ts - start) / dur, 1);
-      el.textContent = fmt(target * easeOutCubic(p));
+      paint(target * easeOutCubic(p));
       if (p < 1) window.requestAnimationFrame(frame);
     }
     window.requestAnimationFrame(frame);

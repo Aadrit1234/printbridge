@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0e1524">
-<title>PrintBridge — turn any phone into a printer</title>
-<meta name="description" content="PrintBridge is print infrastructure for workspaces and shops. Send a document from any phone or laptop, choose a printer, walk up and collect your pages.">
+<title>PrintBridge — printing, arranged around the printer</title>
+<meta name="description" content="PrintBridge turns the printer you already own into a walk-up print service: a code on the machine, a page on any phone, and every sheet accounted for. For offices and print shops.">
 <link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
 <link rel="alternate icon" href="/assets/icon-192.png">
 <link rel="apple-touch-icon" href="/assets/icon-192.png">
-<link rel="stylesheet" href="/site.css">
+<link rel="stylesheet" href="/site.css?v=3.0.0">
 <script src="/config.js"></script>
 <script>
   /* Light or dark, decided before the first paint so nobody sees a flash of the
    * wrong one. The choice is the whole product's (pb.theme, shared with the
-   * print site and the admin console); 'system' — or nothing saved yet — asks
+   * print site and the owner console); 'system' — or nothing saved yet — asks
    * the device. Light stays the default when the device has no opinion. */
   (function () {
     try {
@@ -25,11 +25,18 @@
     } catch (e) { /* private mode — the default stands */ }
   })();
 </script>
-<script src="/site.js" defer></script>
+<script src="/site.js?v=3.0.0" defer></script>
 </head>
 <body>
 
 <a class="skip-link" href="#main">Skip to content</a>
+
+<!-- registration marks: the corner furniture of every printed sheet -->
+<div class="press-marks" aria-hidden="true">
+  <span class="mark mark-tl"></span><span class="mark mark-tr"></span>
+  <span class="mark mark-bl"></span><span class="mark mark-br"></span>
+  <span class="press-bar"><i></i><i></i><i></i><i></i></span>
+</div>
 
 <header class="site-nav" id="site-nav">
   <div class="nav-inner">
@@ -49,7 +56,7 @@
     <nav class="site-links" id="site-links" aria-label="Primary">
       <a href="#about">About</a>
       <a href="#product">Product</a>
-      <a href="#features">Features</a>
+      <a href="#how">How it prints</a>
       <a href="#pricing">Pricing</a>
       <a href="#contact">Contact</a>
     </nav>
@@ -77,231 +84,298 @@
 </header>
 
 <main id="main">
-  <!-- ============ HERO ============ -->
+
+  <!-- ==================================================== HERO -->
   <section class="hero" id="top">
     <canvas class="hero-canvas" id="hero-canvas" aria-hidden="true"></canvas>
     <div class="hero-sheet hero-sheet-1" data-parallax="0.18" aria-hidden="true"></div>
     <div class="hero-sheet hero-sheet-2" data-parallax="0.10" aria-hidden="true"></div>
     <div class="hero-sheet hero-sheet-3" data-parallax="0.26" aria-hidden="true"></div>
 
-    <div class="hero-inner">
-      <p class="kicker" data-reveal>
-        <span class="kicker-dot" aria-hidden="true"></span>
-        Workspace &amp; shop print management
-      </p>
+    <div class="hero-grid">
+      <div class="hero-inner">
+        <p class="kicker" data-reveal>
+          <span class="kicker-dot" aria-hidden="true"></span>
+          Walk-up printing · offices &amp; print shops
+        </p>
 
-      <h1 class="hero-title" data-reveal data-delay="80">
-        PrintBridge
-        <svg class="scribble" viewBox="0 0 320 24" aria-hidden="true">
-          <path d="M6 16 C 60 4 120 22 176 12 S 288 6 314 15" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/>
-        </svg>
-      </h1>
+        <h1 class="hero-title" data-reveal data-delay="80">
+          Printing,<br>arranged around<br>the printer
+          <svg class="scribble" viewBox="0 0 320 24" aria-hidden="true">
+            <path d="M6 16 C 60 4 120 22 176 12 S 288 6 314 15" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/>
+          </svg>
+        </h1>
 
-      <p class="hero-lead" data-reveal data-delay="160">
-        Turn any phone into a printer. Send a document, pick the machine, walk up and
-        collect your pages — no install, no USB, no queue at the front desk.
-      </p>
+        <p class="hero-lead" data-reveal data-delay="160">
+          PrintBridge is a small service that sits next to the printer you already own.
+          Anyone with the machine's code sends their pages from their own phone and collects
+          them at the tray. No app, no account, no drivers, no queue at the front desk.
+        </p>
 
-      <div class="hero-ctas" data-reveal data-delay="240">
-        <a class="btn btn-lg btn-print" href="/print">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg>
-          <span>Print</span>
-        </a>
-        <a class="btn btn-lg btn-login" href="/owner">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg>
-          <span>Log in</span>
-        </a>
+        <div class="hero-ctas" data-reveal data-delay="240">
+          <a class="btn btn-lg btn-print" href="/print">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg>
+            <span>Send a document</span>
+          </a>
+          <a class="btn btn-lg btn-login" href="/owner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg>
+            <span>Owner log in</span>
+          </a>
+        </div>
+
+        <ul class="hero-facts" data-reveal data-delay="320">
+          <li><b>No app</b> — a page, a code, a tray</li>
+          <li><b>No account</b> for whoever is printing</li>
+          <li><b>Set up once</b> on the machine beside the printer</li>
+        </ul>
       </div>
 
-      <p class="hero-note" data-reveal data-delay="320">
-        Every print command gets a short code you can follow — page-by-page colour and mono, billed to the right team.
-      </p>
+      <!-- the thing you actually get: a print command in flight -->
+      <figure class="hero-ticket" data-reveal data-delay="220">
+        <span class="ticket-tear" aria-hidden="true"></span>
+        <figcaption class="ticket-head">
+          <span class="ticket-label">Print command</span>
+          <span class="ticket-state"><i aria-hidden="true"></i>Printing</span>
+        </figcaption>
+        <div class="ticket-rows">
+          <div class="t-row"><span>Token</span><b class="mono">PB-RDY5-7XU5</b></div>
+          <div class="t-row"><span>Printer</span><b>Ground floor copier</b></div>
+          <div class="t-row"><span>Document</span><b>Thesis-final.pdf</b></div>
+          <div class="t-row"><span>Sheets</span><b>12 · A4 · two sides</b></div>
+          <div class="t-row total"><span>Collected by</span><b>Token page 1 of 13</b></div>
+        </div>
+        <p class="ticket-foot">The token is printed <em>on top</em> of the document, so nobody walks off with the wrong pages.</p>
+      </figure>
     </div>
 
     <div class="hero-tape" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
   </section>
 
-  <!-- ============ ABOUT ============ -->
+  <!-- ==================================================== TICKER -->
+  <div class="ticker" aria-hidden="true">
+    <div class="ticker-track">
+      <span>Windows spooler</span><i></i>
+      <span>IPP / AirPrint</span><i></i>
+      <span>CUPS</span><i></i>
+      <span>Outbox</span><i></i>
+      <span>A4 · Letter · Legal · A5</span><i></i>
+      <span>Duplex</span><i></i>
+      <span>Colour &amp; mono metered per side</span><i></i>
+      <span>Retries for 30 minutes</span><i></i>
+      <span>Token page first</span><i></i>
+      <span>Windows spooler</span><i></i>
+      <span>IPP / AirPrint</span><i></i>
+      <span>CUPS</span><i></i>
+      <span>Outbox</span><i></i>
+      <span>A4 · Letter · Legal · A5</span><i></i>
+      <span>Duplex</span><i></i>
+      <span>Colour &amp; mono metered per side</span><i></i>
+      <span>Retries for 30 minutes</span><i></i>
+      <span>Token page first</span><i></i>
+    </div>
+  </div>
+
+  <!-- ==================================================== ABOUT -->
   <section class="section about" id="about">
+    <div class="wrap about-grid">
+      <div class="about-copy">
+        <p class="kicker" data-reveal>The problem</p>
+        <h2 class="display" data-reveal data-delay="60">Printing is the last thing your phone cannot do alone. The software around it never caught up.</h2>
+        <p class="lead" data-reveal data-delay="120">
+          Everything else moved to the device in your hand. Printing did not: it still wants a desktop,
+          a driver, a cable, an account, or a member of staff who knows how the machine works.
+          PrintBridge puts the missing piece where it belongs — next to the printer — and lets
+          everything else stay on the phone.
+        </p>
+        <p class="lead" data-reveal data-delay="180">
+          The machine keeps doing what it already does well. PrintBridge only decides
+          <em>what goes to it</em>, <em>who asked</em>, and <em>whether it has been paid for</em>.
+        </p>
+      </div>
+
+      <figure class="pull-quote" data-reveal data-delay="140">
+        <blockquote>We watched three people queue at a library printer to fight over one USB stick. That is the entire product brief.</blockquote>
+        <figcaption>— the first commit</figcaption>
+      </figure>
+    </div>
+
+    <!-- honest numbers: the limits of the thing, not vanity metrics -->
     <div class="wrap">
-      <div class="section-head">
-        <p class="kicker" data-reveal>About PrintBridge</p>
-        <h2 class="display" data-reveal data-delay="80">Printer queues were built for the last century.<br><span class="hl">We built the one for your pockets.</span></h2>
-        <p class="lead" data-reveal data-delay="160">
-          PrintBridge lives where printing actually happens — beside the people waiting for their
-          pages. It is the connective tissue between any phone, laptop or tablet and the printers you
-          already own. A front desk disappears, a shared queue appears, and every sheet is accounted
-          for in colour or mono, by team, by job, by person.
-        </p>
-      </div>
-
-      <div class="story-row">
-        <p class="story" data-reveal>
-          We started PrintBridge after watching three people line up at a library printer to fight
-          over a USB stick. Printing is the last compute-heavy thing your phone can't do alone —
-          it shouldn't take an IT department to make it work.
-        </p>
-        <p class="story" data-reveal data-delay="120">
-          Today PrintBridge runs in coworking desks, print shops, and campus libraries: a tiny
-          service on your shop printer connects the whole floor. Users bring the phone, PrintBridge
-          brings the bridge.
-        </p>
-      </div>
-
       <dl class="stats" id="stats">
         <div class="stat" data-reveal>
-          <dt class="stat-num" data-count="12400">0</dt>
-          <dd>pages printed and counted</dd>
+          <dt class="stat-num" data-count="10">0</dt>
+          <dd>documents in one print command</dd>
         </div>
-        <div class="stat" data-reveal data-delay="90">
-          <dt class="stat-num" data-count="3800">0</dt>
-          <dd>devices connected, no install</dd>
+        <div class="stat" data-reveal data-delay="80">
+          <dt class="stat-num" data-count="25">0<small>MB</small></dt>
+          <dd>per document, upload to print</dd>
         </div>
-        <div class="stat" data-reveal data-delay="180">
-          <dt class="stat-num" data-count="212">0</dt>
-          <dd>shops &amp; workspaces running it</dd>
+        <div class="stat" data-reveal data-delay="160">
+          <dt class="stat-num" data-count="30">0<small>min</small></dt>
+          <dd>of retries while a printer sleeps</dd>
         </div>
-        <div class="stat" data-reveal data-delay="270">
-          <dt class="stat-num" data-count="99">0<small>%</small></dt>
-          <dd>print-command uptime</dd>
+        <div class="stat" data-reveal data-delay="240">
+          <dt class="stat-num" data-count="48">0<small>h</small></dt>
+          <dd>before finished jobs are swept</dd>
         </div>
       </dl>
     </div>
   </section>
 
-  <!-- ============ PRODUCT ============ -->
+  <!-- ==================================================== PRODUCT -->
   <section class="section product" id="product">
-    <div class="wrap product-inner">
-      <div class="product-text">
-        <div class="section-head">
-          <p class="kicker" data-reveal>The product</p>
-          <h2 class="display" data-reveal data-delay="80">A bridge, not a box.</h2>
-          <p class="lead" data-reveal data-delay="160">
-            One small service runs on the printer-side of the room. Everything else happens on
-            screens people already carry. You get a walk-up print site for anyone, and an admin
-            console for the humans responsible for the toner budget.
-          </p>
-        </div>
-        <ul class="product-points" data-reveal data-delay="220">
-          <li>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h12"/><path d="M9 12h12"/><path d="M9 18h12"/><circle cx="4" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>
-            A release code at the printer — pick, release, run
-          </li>
-          <li>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16l-6.5 8v5l-3 3v-8z"/></svg>
-            Per-side colour &amp; mono billing on every job
-          </li>
-          <li>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 3"/></svg>
-            Job history your team can search, not a paper tray
-          </li>
-        </ul>
-      </div>
-
-      <div class="product-diagram" data-reveal data-delay="140" aria-hidden="true">
-        <svg viewBox="0 0 520 360" class="diagram-svg">
-          <defs>
-            <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M0 0 L8 4 L0 8 z" fill="#e0a44c"/>
-            </marker>
-          </defs>
-          <path class="dash d1" d="M90 260 C 190 190 260 130 320 130" marker-end="url(#arrow)"/>
-          <path class="dash d2" d="M348 166 C 396 240 430 258 452 258" marker-end="url(#arrow)"/>
-
-          <g class="phone">
-            <rect x="34" y="190" width="66" height="126" rx="9" class="phone-body"/>
-            <rect x="44" y="214" width="46" height="62" rx="4" class="phone-screen"/>
-            <line x1="50" y1="222" x2="84" y2="222" class="phone-line"/>
-            <line x1="50" y1="230" x2="76" y2="230" class="phone-line"/>
-            <line x1="50" y1="238" x2="80" y2="238" class="phone-line"/>
-            <circle cx="67" cy="298" r="5" class="phone-home"/>
-          </g>
-
-          <g class="bridge-node">
-            <circle cx="210" cy="146" r="30" class="node-ring"/>
-            <path d="M196 146 l10 10 l20 -26" class="node-tick"/>
-          </g>
-
-          <g class="printer">
-            <rect x="300" y="130" width="150" height="52" rx="7" class="printer-top"/>
-            <rect x="284" y="182" width="182" height="96" rx="8" class="printer-body"/>
-            <rect x="338" y="150" width="74" height="12" rx="3" class="printer-tray"/>
-            <path class="paper" d="M466 120 h34 a4 4 0 0 1 4 4 v36 a4 4 0 0 1 -4 4 h-34 a4 4 0 0 1 -4 -4 v-36 a4 4 0 0 1 4 -4 z"/>
-            <line x1="474" y1="132" x2="492" y2="132" class="paper-line"/>
-            <line x1="474" y1="140" x2="486" y2="140" class="paper-line"/>
-            <path class="slot" d="M306 200 h138"/>
-          </g>
-
-          <text x="67" y="352" class="diagram-label">walk-up site</text>
-          <text x="474" y="340" class="diagram-label">print</text>
-        </svg>
-        <p class="diagram-caption">Phone sends → PrintBridge lines up the job → the printer releases.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ FEATURES ============ -->
-  <section class="section features" id="features">
     <div class="wrap">
       <div class="section-head">
-        <p class="kicker" data-reveal>Features</p>
-        <h2 class="display" data-reveal data-delay="80">Everything a print room should be.</h2>
-        <p class="lead" data-reveal data-delay="160">Not a fleet of drivers, not a bind of cables — a handful of things done properly.</p>
+        <p class="kicker" data-reveal>The product</p>
+        <h2 class="display" data-reveal data-delay="60">Two sites, one console,<br>and nothing to install on anybody's phone.</h2>
+        <p class="lead" data-reveal data-delay="120">
+          One process runs on the machine that can see the printer. It serves the page your guests use,
+          the console you administer, and the API between them. That is the whole system.
+        </p>
       </div>
 
-      <div class="card-grid">
-        <article class="card" data-reveal data-delay="0">
-          <span class="card-num" aria-hidden="true">01</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
-          <h3>Send from anything</h3>
-          <p>Any phone, tablet or laptop on the network or web — PDFs, photos and docs get a print code in seconds. No apps, no accounts for guests.</p>
+      <div class="product-cols">
+        <article class="col card-flat" data-reveal>
+          <span class="col-tag">For whoever is standing there</span>
+          <h3>The print page</h3>
+          <p>Type the code from the sticker, choose what the machine can actually do, send it, get a token. Ten files at once, live preview, and a price before anything moves.</p>
+          <ul class="tick-list">
+            <li>Works on any phone, no install</li>
+            <li>Only offers what your printer supports</li>
+            <li>Token printed on top of the job</li>
+          </ul>
+          <a class="link-arrow" href="/print">Open the print page <span aria-hidden="true">→</span></a>
         </article>
 
-        <article class="card" data-reveal data-delay="90">
-          <span class="card-num" aria-hidden="true">02</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11 3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>
-          <h3>Walk-up release</h3>
-          <p>A person arrives, types a code, and their job prints — exactly where and when they want it. Nothing printed by accident.</p>
-        </article>
-
-        <article class="card" data-reveal data-delay="180">
-          <span class="card-num" aria-hidden="true">03</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="10" r="0"/></svg>
-          <h3>Colour &amp; mono per page</h3>
-          <p>Every side is counted and rated by colour or mono from day one — so a poster and a contract never share a price.</p>
-        </article>
-
-        <article class="card" data-reveal data-delay="0">
-          <span class="card-num" aria-hidden="true">04</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20"/><path d="M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-          <h3>Budgets that hold</h3>
-          <p>Give a team a monthly pot, let overspend auto-hold, and know exactly which department ate the toner.</p>
-        </article>
-
-        <article class="card" data-reveal data-delay="90">
-          <span class="card-num" aria-hidden="true">05</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 7l-10 10-5-5-6 6"/><path d="M17 7h6v6"/></svg>
-          <h3>Built-in reporting</h3>
-          <p>What printed, in what colour, by whom, and at what cost — exported, scheduled, or read straight from the console.</p>
-        </article>
-
-        <article class="card" data-reveal data-delay="180">
-          <span class="card-num" aria-hidden="true">06</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>
-          <h3>Zero install</h3>
-          <p>Everything rides on a browser. The little service that runs next to your printer is the only thing PrintBridge ever installs.</p>
+        <article class="col card-flat" data-reveal data-delay="90">
+          <span class="col-tag">For the person paying for the toner</span>
+          <h3>The owner console</h3>
+          <p>Every printer you own, every code, every job, and what it cost — with per-page rates you set yourself, in rupees, and a ledger that matches the tray.</p>
+          <ul class="tick-list">
+            <li>Colour and mono priced per side, by you</li>
+            <li>Guests pay before the paper moves</li>
+            <li>One console per machine, nothing shared</li>
+          </ul>
+          <a class="link-arrow" href="/owner">Log in to your console <span aria-hidden="true">→</span></a>
         </article>
       </div>
     </div>
   </section>
 
-  <!-- ============ PRICING ============ -->
+  <!-- ==================================================== HOW IT PRINTS -->
+  <section class="section how" id="how">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker" data-reveal>How it prints</p>
+        <h2 class="display" data-reveal data-delay="60">Sticker, phone, tray.</h2>
+        <p class="lead" data-reveal data-delay="120">Three objects, no accounts in between. This is the whole guest experience, end to end.</p>
+      </div>
+
+      <ol class="walkup">
+        <li class="walkup-step" data-reveal>
+          <span class="step-num" aria-hidden="true">01</span>
+          <h3>The sticker on the machine</h3>
+          <p>A code, printed by PrintBridge and stuck within reach. It can only send documents to <em>this</em> printer, and you can pause the machine at any moment.</p>
+          <div class="artefact" aria-hidden="true">
+            <span class="artefact-sticker">
+              <span class="sticker-kicker">Walk-up printer</span>
+              <span class="sticker-name">Ground floor copier</span>
+              <span class="sticker-code mono">PP-7K4Q-2M9D</span>
+              <span class="sticker-qr"><b class="qr-plot"></b></span>
+              <span class="sticker-hint">Scan the QR, or type the code</span>
+            </span>
+          </div>
+        </li>
+
+        <li class="walkup-step" data-reveal data-delay="90">
+          <span class="step-num" aria-hidden="true">02</span>
+          <h3>Their own phone</h3>
+          <p>No account, no email, no app store. The page asks for the code, then for a document — and only ever offers the options the printer can physically do.</p>
+          <div class="artefact" aria-hidden="true">
+            <span class="artefact-phone">
+              <span class="phone-speaker"></span>
+              <span class="phone-page">
+                <span class="pp-kicker">Printer code</span>
+                <span class="pp-cells"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                <span class="pp-button">Find this printer</span>
+                <span class="pp-note">Eight characters. No letter looks like 0 or 1.</span>
+              </span>
+            </span>
+          </div>
+        </li>
+
+        <li class="walkup-step" data-reveal data-delay="180">
+          <span class="step-num" aria-hidden="true">03</span>
+          <h3>The tray, with a token on top</h3>
+          <p>Every print command gets its own short token, and that token is printed as the first page. You can follow it from <b>queued</b> to <b>printed</b>, and so can the person waiting.</p>
+          <div class="artefact" aria-hidden="true">
+            <span class="artefact-sheet">
+              <span class="sheet-token-strip">
+                <span class="ts-label">TOKEN</span>
+                <span class="ts-code mono">PB-RDY5-7XU5</span>
+              </span>
+              <span class="sheet-line"></span>
+              <span class="sheet-line short"></span>
+              <span class="sheet-line"></span>
+              <span class="sheet-line mid"></span>
+              <span class="sheet-line short"></span>
+              <span class="sheet-line"></span>
+            </span>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ==================================================== FEATURES -->
+  <section class="section features" id="features">
+    <div class="wrap">
+      <div class="section-head wide">
+        <p class="kicker" data-reveal>What it does when things go wrong</p>
+        <h2 class="display" data-reveal data-delay="60">Built for the day the printer is asleep.</h2>
+        <p class="lead" data-reveal data-delay="120">
+          Printers jam, go to sleep, run out of paper, and change address. Most print software
+          fails at exactly that moment. These are the behaviours that decide whether a job
+          survives it.
+        </p>
+      </div>
+
+      <dl class="spec-sheet">
+        <div class="spec-row" data-reveal>
+          <dt><span class="spec-index">01</span> A sleeping printer loses nothing</dt>
+          <dd>The job leaves the queue, becomes <b>waiting</b>, and retries with a growing backoff — 5 seconds out to 2 minutes — for a window you set. It prints the moment the machine answers, and it survives a server restart.</dd>
+        </div>
+        <div class="spec-row" data-reveal data-delay="60">
+          <dt><span class="spec-index">02</span> A picky printer still prints</dt>
+          <dd>Some machines refuse the richer job attributes. PrintBridge drops to basic options rather than failing the job, and tells you which path it took and why.</dd>
+        </div>
+        <div class="spec-row" data-reveal data-delay="120">
+          <dt><span class="spec-index">03</span> No printer at all</dt>
+          <dd>Every upload is converted server-side to a print-ready PDF and rasterised page by page, so the preview <em>is</em> the output. With no printer attached the file lands in the outbox — nothing is ever lost.</dd>
+        </div>
+        <div class="spec-row" data-reveal data-delay="180">
+          <dt><span class="spec-index">04</span> Shop jobs are paid before they print</dt>
+          <dd>The price is recomputed on the server from your per-page rates and the document's real page count. An unpaid job is refused with a reason, not with silence. Every page is charged, including the token page.</dd>
+        </div>
+        <div class="spec-row" data-reveal data-delay="240">
+          <dt><span class="spec-index">05</span> Codes are scoped, tokens are private</dt>
+          <dd>A printer code can only send to its own machine. A token belongs to the phone that made it — a different device gets a 404, not somebody else's pages.</dd>
+        </div>
+        <div class="spec-row" data-reveal data-delay="300">
+          <dt><span class="spec-index">06</span> Formats, as far as LibreOffice reaches</dt>
+          <dd>PDF, images (JPEG, PNG, HEIC, WEBP, GIF, BMP, multi-page TIFF), plain text, CSV and Markdown out of the box — plus Word, Excel and PowerPoint when LibreOffice is present. A file that claims to be a PDF but is not is refused rather than sent.</dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- ==================================================== PRICING -->
   <section class="section pricing" id="pricing">
     <div class="wrap">
       <div class="section-head center">
         <p class="kicker" data-reveal>Pricing</p>
-        <h2 class="display" data-reveal data-delay="80">Buy the licence once.<br><span class="hl">Print for as long as you like.</span></h2>
-        <p class="lead" data-reveal data-delay="160">One price per machine, in INR — no seats, no cut of your pages. A workspace is a single lifetime payment; a shop picks yearly or lifetime. What your guests pay per page is yours to set in the console.</p>
+        <h2 class="display" data-reveal data-delay="60">Buy the licence once.<br><span class="hl">Print for as long as you like.</span></h2>
+        <p class="lead" data-reveal data-delay="120">One price per machine, in rupees — no per-seat fees and no cut of your pages. What your guests pay per sheet is yours to set in the console.</p>
       </div>
 
       <div class="tiers">
@@ -336,7 +410,7 @@
 
           <ul class="tier-list">
             <li>Everything in Workspace</li>
-            <li>Colour and black &amp; white priced per page, in INR</li>
+            <li>Colour and black &amp; white priced per page</li>
             <li>Guest checkout before anything prints</li>
             <li>Per-job margins and takings, live</li>
           </ul>
@@ -353,7 +427,7 @@
           <ul class="tier-list">
             <li>Everything in Shop, across many machines</li>
             <li>Volume licensing and annual invoicing</li>
-            <li>SSO, audit logs and on-prem service</li>
+            <li>SSO and audit logs</li>
             <li>Support with an SLA</li>
           </ul>
           <p class="tier-costline"><em>Volume rates</em> on request</p>
@@ -361,29 +435,45 @@
         </article>
       </div>
 
-      <p class="pricing-note" data-reveal>
-        Prices in INR per printer, inclusive of taxes. Per-page rates (colour and black &amp; white) are set by each shop in the admin console.
-      </p>
+      <!-- what a shop job looks like on paper -->
+      <figure class="ledger" data-reveal>
+        <figcaption class="ledger-head">
+          <span class="ledger-title">Job ticket</span>
+          <span class="ledger-meta">Shop licence · rates set by the owner</span>
+        </figcaption>
+        <table>
+          <thead>
+            <tr><th>Item</th><th>Detail</th><th class="num">Pages</th><th class="num">Rate</th><th class="num">Amount</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Cover page</td><td>Token page, printed first</td><td class="num">1</td><td class="num">₹2.00</td><td class="num">₹2.00</td></tr>
+            <tr><td>Document</td><td>Coursework.pdf · A4 · two sides</td><td class="num">11</td><td class="num">₹2.00</td><td class="num">₹22.00</td></tr>
+            <tr><td>Appendix</td><td>Annexure.png · A4 · colour</td><td class="num">2</td><td class="num">₹8.00</td><td class="num">₹16.00</td></tr>
+          </tbody>
+          <tfoot>
+            <tr><td colspan="2">Counted on the server, not the phone</td><td class="num">14</td><td class="num"></td><td class="num strong">₹40.00</td></tr>
+          </tfoot>
+        </table>
+        <p class="ledger-note">Paid before printing. Reprint the same document and it needs its own payment — the old token keeps its own history.</p>
+      </figure>
     </div>
   </section>
 
-  <!-- ============ CONTACT ============ -->
+  <!-- ==================================================== CONTACT -->
   <section class="section contact" id="contact">
     <div class="wrap contact-inner">
       <div class="contact-text">
-        <div class="section-head">
-          <p class="kicker" data-reveal>Contact us</p>
-          <h2 class="display" data-reveal data-delay="80">Ask a human. Get a straight answer.</h2>
-          <p class="lead" data-reveal data-delay="160">
-            Set up a floor, route a printer, or break a queue — write to us and talk to the people
-            who actually build it.
-          </p>
-        </div>
-        <p class="contact-email" data-reveal data-delay="220">
+        <p class="kicker" data-reveal>Contact</p>
+        <h2 class="display" data-reveal data-delay="60">Ask a human. Get a straight answer.</h2>
+        <p class="lead" data-reveal data-delay="120">
+          Setting up a floor, moving a printer onto Wi-Fi, or working out what a page should cost —
+          write to us and talk to the people who build it.
+        </p>
+        <p class="contact-email" data-reveal data-delay="180">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
           <a href="mailto:sales@printbridge.app">sales@printbridge.app</a>
         </p>
-        <div class="contact-cta" data-reveal data-delay="300">
+        <div class="contact-cta" data-reveal data-delay="240">
           <a class="btn btn-lg btn-print" href="mailto:sales@printbridge.app?subject=PrintBridge%20for%20our%20floor">Email PrintBridge</a>
         </div>
       </div>
@@ -398,7 +488,7 @@
           <path d="M33.5 23 h5 a2 2 0 0 1 2 2 v3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
         </svg>
         <h3>We reply to every message.</h3>
-        <p>Typical turnaround inside one working day. If your printer is down, say so in the subject line.</p>
+        <p>Typically inside one working day, Monday to Friday. If your printer is down, put that in the subject line and it goes to the front.</p>
         <p class="contact-hours">Mon–Fri · 09:00–18:00 CET</p>
       </div>
     </div>
@@ -421,7 +511,7 @@
     <nav class="footer-links" aria-label="Footer">
       <a href="#about">About</a>
       <a href="#product">Product</a>
-      <a href="#features">Features</a>
+      <a href="#how">How it prints</a>
       <a href="#pricing">Pricing</a>
       <a href="#contact">Contact</a>
     </nav>
@@ -431,7 +521,7 @@
     </div>
   </div>
   <div class="wrap footer-base">
-    <p>Copyright PrintBridge</p>
+    <p>© PrintBridge · self-hosted, on your own machine</p>
     <p class="footer-tag">Printed responsibly, one side at a time.</p>
   </div>
 </footer>

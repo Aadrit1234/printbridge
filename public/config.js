@@ -9,13 +9,13 @@
  *
  *   apiBase     full origin of the backend, e.g. https://printbridge.tailnet-1234.ts.net
  *               (empty = this origin)
- *   adminBase   where the control room lives when it is not on this host — the
- *               main site's Admin button points here. Empty = same origin.
+ *   adminBase   where the owner console lives when it is not on this host — the
+ *               main site's Log in button points here. Empty = same origin.
  *
  * The backend must list that frontend origin in ALLOWED_ORIGINS or the browser
- * will refuse every request — see docs/deploy.md. The admin console is never
- * part of this bundle: it lives on the machine that runs the server, because
- * that is the only machine that can print.
+ * will refuse every request — see docs/deploy.md. The machine console is never
+ * part of this bundle: it ships inside the desktop app, because only the machine
+ * holding the printer can print.
  */
 window.PRINTBRIDGE_CONFIG = Object.assign(
   { apiBase: '', adminBase: '' },
