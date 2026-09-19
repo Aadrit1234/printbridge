@@ -1,13 +1,17 @@
 {
   "name": "printbridge",
-  "version": "2.4.0",
-  "description": "Self-hosted print infrastructure: a main site, a walk-up print site with printer codes and token numbers, and an admin console — over a USB Windows queue, IPP/AirPrint, or CUPS.",
+  "version": "3.0.0",
+  "description": "Self-hosted print infrastructure: a walk-up print site with printer codes and token numbers, and a desktop app that runs the service, sets the printer up and holds the console — over a USB Windows queue, IPP/AirPrint, or CUPS.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "desktop": "electron desktop/main.js",
+    "desktop:pack": "electron-builder --win --x64 --dir",
+    "desktop:build": "electron-builder --win --x64",
     "build:web": "node scripts/build-web.cjs",
-    "check": "node --check server.js && node --check src/app.js && node --check src/cors.js && node --check src/cookies.js && node --check src/config.js && node --check src/logger.js && node --check src/storage.js && node --check src/events.js && node --check src/routes/jobs.js && node --check src/routes/files.js && node --check src/routes/printer.js && node --check src/routes/system.js && node --check src/routes/owner.js && node --check src/services/queue.js && node --check src/services/tickets.js && node --check src/services/converter.js && node --check src/services/rasterizer.js && node --check src/services/render.js && node --check src/services/pdf-text.js && node --check src/services/printers.js && node --check src/services/access-codes.js && node --check src/services/accounts.js && node --check src/services/discovery.js && node --check src/services/watchdog.js && node --check src/services/backends/registry.js && node --check src/services/backends/spooler.js && node --check src/services/backends/ipp.js && node --check src/services/backends/cups.js && node --check src/services/backends/outbox.js && node --check src/services/tools/windows.js && node --check scripts/fake-printer.cjs && node --check scripts/smoke-ipp.cjs && node --check scripts/smoke-walkup.cjs && node --check scripts/smoke-accounts.cjs && node --check scripts/build-web.cjs && node --check public/site.js && node --check public/print/print.js && node --check public/sw.js",
+    "check:modules": "node scripts/check-modules.cjs",
+    "check": "node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/host.js && node scripts/check-modules.cjs && node --check server.js && node --check src/app.js && node --check src/cors.js && node --check src/cookies.js && node --check src/config.js && node --check src/logger.js && node --check src/storage.js && node --check src/events.js && node --check src/routes/jobs.js && node --check src/routes/files.js && node --check src/routes/printer.js && node --check src/routes/system.js && node --check src/routes/owner.js && node --check src/services/queue.js && node --check src/services/tickets.js && node --check src/services/converter.js && node --check src/services/rasterizer.js && node --check src/services/render.js && node --check src/services/pdf-text.js && node --check src/services/printers.js && node --check src/services/access-codes.js && node --check src/services/accounts.js && node --check src/services/discovery.js && node --check src/services/watchdog.js && node --check src/services/backends/registry.js && node --check src/services/backends/spooler.js && node --check src/services/backends/ipp.js && node --check src/services/backends/cups.js && node --check src/services/backends/outbox.js && node --check src/services/tools/windows.js && node --check scripts/fake-printer.cjs && node --check scripts/smoke-ipp.cjs && node --check scripts/smoke-walkup.cjs && node --check scripts/smoke-accounts.cjs && node --check scripts/build-web.cjs && node --check public/site.js && node --check public/print/print.js && node --check public/sw.js",
     "smoke": "node scripts/smoke.cjs",
     "smoke:ipp": "node scripts/smoke-ipp.cjs",
     "smoke:walkup": "node scripts/smoke-walkup.cjs",
@@ -19,7 +23,69 @@
     "node": ">=18"
   },
   "license": "MIT",
+  "author": "PrintBridge",
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "Aadrit1234",
+      "repo": "printbridge"
+    }
+  ],
+  "build": {
+    "appId": "app.printbridge.desktop",
+    "productName": "PrintBridge",
+    "directories": {
+      "output": "release"
+    },
+    "extraMetadata": {
+      "main": "desktop/main.js"
+    },
+    "files": [
+      "server.js",
+      "src/**/*",
+      "public/**/*",
+      "scripts/**/*",
+      "desktop/main.js",
+      "desktop/preload.js",
+      "desktop/host.js",
+      "desktop/renderer/**/*",
+      "package.json",
+      "!**/*.map",
+      "!data/**",
+      "!dist/**",
+      "!release/**",
+      "!.env",
+      "!docs/**",
+      "!**/{.git,.vercel,.github}/**"
+    ],
+    "asar": false,
+    "npmRebuild": false,
+    "win": {
+      "icon": "public/assets/icon-512.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PrintBridge",
+      "artifactName": "PrintBridge-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "PrintBridge-${version}-portable.${ext}"
+    }
+  },
   "dependencies": {
+    "electron-updater": "^6.3.9",
     "@napi-rs/canvas": "^0.1.65",
     "bonjour-service": "^1.2.1",
     "express": "^4.21.2",

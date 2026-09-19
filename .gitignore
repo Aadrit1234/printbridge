@@ -1,6 +1,8 @@
 # Dependencies and build output
 node_modules/
 dist/
+# electron-builder: the installers and the unpacked app (hundreds of MB)
+release/
 
 # Vercel project link (local ids, not secrets — but not needed in git)
 .vercel/
@@ -9,6 +11,7 @@ dist/
 # admin PIN hash. Never commit this: it is your documents and your secret.
 data/
 .tmp-testdata/
+.tmp-*/
 
 # Local overrides and logs
 .env

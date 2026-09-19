@@ -3,12 +3,13 @@
 PrintBridge is three sites and one server. Understanding which site lives where
 is the whole of this document.
 
-| Site | Path | Who it is for | Lives where |
+| Surface | Path | Who it is for | Lives where |
 |---|---|---|---|
 | **Main site** | `/` | the public — company, product, features, pricing, contact | the print server, *and optionally* a static host (Vercel) |
 | **Print site** | `/print` | whoever is standing at the printer | the print server, *and optionally* the same static host |
-| **Admin site** | `/admin` | the owner (PIN) | **only** the print server |
-| **API** | `/api/v1`, `/api/admin` | the two sites above | only the print server |
+| **Owner site** | `/owner` | the licence holder: redeem a code, sign in | **only** the print server |
+| **The console** | the desktop app | the owner (PIN) | **only** the app, on `127.0.0.1` |
+| **API** | `/api/v1`, `/api/owner`, `/api/admin` | the sites and the app | only the print server |
 
 And **one server**, on the machine next to the printer. That is not a
 limitation to work around — it is the design:
@@ -19,10 +20,10 @@ limitation to work around — it is the design:
 > Vercel Functions have no persistent disk, no route to your LAN, and cap request
 > bodies at 4.5 MB. So the backend lives on the machine that can see the printer.
 
-The **admin console never goes into a static bundle**. It is the surface that
-changes the machine and shows other people's documents, it needs a same-origin
-session cookie to be trustworthy, and there is no reason for it to be on a public
-host. `npm run build:web` skips `public/admin/` on purpose.
+The **console is not a web page at all**. It ships inside the desktop app, which
+serves it on `127.0.0.1` and proxies the API from the same origin, so there is
+even less to get wrong: no public host can serve it, and no browser on the LAN
+can reach it. `npm run build:web` publishes the guest surfaces only.
 
 ---
 
@@ -44,12 +45,12 @@ required: no CORS, no cookies across origins, no third party in the loop.
      -Protocol TCP -LocalPort 8088 -Profile Private
    ```
    Linux: `sudo ufw allow from 192.168.1.0/24 to any port 8088 proto tcp`
-3. **Start at boot** — Task Scheduler on Windows, a systemd unit on Linux
-   (`Restart=always`), `--restart unless-stopped` on Docker. The copy-paste blocks
-   are in [../INSTRUCTIONS.md](../INSTRUCTIONS.md#6-make-it-survive-a-reboot).
-4. **Set up the printer and hand out codes** — see
-   [../INSTRUCTIONS.md](../INSTRUCTIONS.md): Admin → Printer for the connection,
-   Admin → Printers to register a walk-up printer and print its sticker.
+3. **Start at boot** — the desktop app does this for you (`npm run desktop`, then
+   *Start when I sign in to Windows*). Without it: Task Scheduler on Windows, a
+   systemd unit on Linux (`Restart=always`), `--restart unless-stopped` on Docker.
+4. **Set up the printer and hand out codes** — open the desktop app or
+   `/desktop`: the connection, the silent print engine, the walk-up code and its
+   sticker are all on that one page.
 
 Configuration that must survive restarts belongs in `./.env` (loaded at startup;
 a real environment variable wins):
@@ -106,7 +107,7 @@ What the build writes into `dist/config.js` (and why):
 | Key | Meaning |
 |---|---|
 | `apiBase` | the backend origin — every API call and file URL is built from it |
-| `adminBase` | where the control room lives, so the main site's **Log in** button points at the real console instead of a 404 |
+| `adminBase` | where the owner site lives, so the main site's **Log in** button reaches the backend instead of a 404 |
 
 * **Each preview deployment is a new origin.** Add it to `ALLOWED_ORIGINS`, or
   switch previews off for the project. Once an allowlist is set, a cross-site
@@ -118,7 +119,7 @@ What the build writes into `dist/config.js` (and why):
 * **Guest requests carry no cookies** — the print site identifies a phone with an
   `X-Device-Id` header, so cross-origin printing works everywhere, including
   Safari and Firefox.
-* **The admin console is not in the bundle**, so there is nothing to get wrong
+* **The console is not in the bundle** (it is in the app), so there is nothing to get wrong
   there: it stays on the server's own address.
 
 ---
@@ -133,7 +134,7 @@ curl -s http://localhost:8088/api/v1/system/meta
 curl -s http://localhost:8088/config.js
 curl -s http://localhost:8088/deployment.json
 
-# 3. a printer code resolves (use a real one from Admin → Printers)
+# 3. a printer code resolves (use a real one from the app's Printers panel)
 curl -s http://localhost:8088/api/v1/printers/PP-XXXX-XXXX
 
 # 4. the flows, without a printer
@@ -181,6 +182,6 @@ consumer flow (code → upload → settings → token) with nothing in it about
 networks, tunnels or addresses.
 
 If you do publish it, remember what you are publishing: **anyone who has a
-printer code can send a job to that printer.** Keep the admin PIN on, keep codes
+printer code can send a job to that printer.** Keep the machine PIN on, keep codes
 off public pages, and prefer a VPN or an authenticating proxy over a port
 forward.

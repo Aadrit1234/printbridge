@@ -66,9 +66,26 @@ function createApp({ publicDir, lanUrl, lanAddresses = [] }) {
 
   app.use((req, res) => {
     if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
-    // /admin is its own document, so a guest phone never downloads admin code.
-    if (req.path === '/admin' || req.path.startsWith('/admin/')) {
-      return res.sendFile(path.join(publicDir, 'admin', 'index.html'));
+    /* The console is not a web page any more. It runs inside the desktop app,
+     * which serves its own interface on loopback — so there is nothing here for
+     * somebody who finds this address on the network, and saying so is better
+     * than quietly serving the marketing page instead. */
+    if (req.path === '/admin' || req.path.startsWith('/admin/')
+      || req.path === '/desktop' || req.path.startsWith('/desktop/')) {
+      res.status(404).setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send([
+        '<!doctype html><html lang="en"><meta charset="utf-8">',
+        '<meta name="robots" content="noindex">',
+        '<title>PrintBridge</title>',
+        '<body style="margin:0;background:#0b111d;color:#f2eee6;',
+        'font:16px/1.6 \'Segoe UI\',system-ui,sans-serif;display:grid;place-items:center;height:100vh">',
+        '<div style="max-width:34rem;padding:2rem">',
+        '<h1 style="font:600 1.4rem Georgia,serif;margin:0 0 .6rem">The console lives in the app</h1>',
+        '<p style="color:#c3cadd">PrintBridge\'s control room is part of the desktop app on the machine that',
+        ' owns the printer, not a page on this network. Install and open PrintBridge there.</p>',
+        '<p style="color:#8e9ab6;margin-top:1.4rem"><a style="color:#8ea2ff" href="/print/">Guests print here →</a></p>',
+        '</div></body></html>',
+      ].join('\n'));
     }
     return res.status(404).sendFile(path.join(publicDir, 'index.html'));
   });

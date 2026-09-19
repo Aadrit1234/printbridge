@@ -1,19 +1,21 @@
-# <img src="docs/printer.svg" width="28" height="28" alt=""> PrintBridge 2.3
+# <img src="docs/printer.svg" width="28" height="28" alt=""> PrintBridge 3.0
 
-Self-hosted print infrastructure for workspaces and shops: **three sites, one
-printer, no app to install.**
+Self-hosted print infrastructure for workspaces and shops: **two sites, one
+printer, and an app to set it up.**
 
-| Site | Path | Who it is for |
+| Surface | Where | Who it is for |
 |---|---|---|
 | **Main site** | `/` | the company — about, product, features, pricing, contact — with two buttons: **Print** and **Log in** |
 | **Print site** | `/print` | whoever is standing at the printer: enter a printer code, send a document, get a **token number** |
 | **Owner site** | `/owner` | the customer: redeem the access code from their licence email, sign in, see their licence |
-| **Admin site** | `/admin` | the console: the printer, every job, every code, prices, storage, access |
+| **The app** | the desktop app | the machine that owns the printer: the service, the setup, every job, every code, prices, storage, access, and the licence |
 
-The owner site and the admin site exist **only on the machine that runs the
-server** — the one cabled (or Wi-Fi’d) to the printer. The two public sites can also be hosted
-statically (Vercel, Netlify) while the backend stays home. See
-**[docs/deploy.md](docs/deploy.md)**.
+The control room is **not a web page**. It lives in the desktop app, which serves
+its own interface on `127.0.0.1` and proxies everything else to the print
+service. Nothing administrative is reachable over the network — there is no
+`/admin` to find, and the app will not start a second copy of the service. The
+public sites can also be hosted statically (Vercel, Netlify) while the backend
+stays home. See **[docs/deploy.md](docs/deploy.md)**.
 
 All three sites ship a **light and dark theme**: the switch sits in the main
 site's nav and the print site's header (and in the console's sidebar). The
@@ -35,7 +37,7 @@ means the print site opens dark too.
                                           printed as page 1  └───────────┘
 ```
 
-1. A **printer code** (`PP-XXXX-XXXX`) is registered in Admin → **Printers** and
+1. A **printer code** (`PP-XXXX-XXXX`) is registered in the app's **Printers** and
    stuck on the machine. It names the printer and what it can do.
 2. A guest types it on the print site. What happens next depends on the code’s
    **category**:
@@ -52,7 +54,7 @@ means the print site opens dark too.
 
 3. Every print command gets its own **token**, and that token is **printed as the
    first page** of the document, so nobody picks up the wrong print.
-4. The admin sees the same token in the queue and in **Admin → Print codes**:
+4. The console sees the same token in **Queue** and in **Print codes**:
    *queued → printing → printed*.
 
 ## Quick start
@@ -67,21 +69,42 @@ The console prints everything you need:
 ```
   Main site    http://192.168.1.6:8088          (about · product · pricing · contact)
   Print site   http://192.168.1.6:8088/print    (what the QR points at)
-  Admin site   http://192.168.1.6:8088/admin
+  (the console is in the desktop app, not on this address)
 
   Walk-up printer codes (enter these on the print site):
     PP-PTST-4SHP   Corner Print Shop (demo) · shop
     PP-PTST-4WKS   Workspace Copier (demo) · workspace
-  Admin PIN    482913    (first run — change it in Admin → Access)
+  Admin PIN    482913    (first run — the app asks for it)
 ```
 
-Then: **Admin → Printer** to point PrintBridge at the printer, **Admin →
-Printers** to register a walk-up printer and print its sticker card — and the
-machine is open for business.
+Then: the app's **Printer** page to point PrintBridge at the printer, **Printers**
+to register a walk-up printer and print its sticker card — and the machine is
+open for business. **Setup** on the app's first panel reads all of that back and
+tells you what is still missing.
 
-> **Setting up the machine that owns the printer** — USB first, then flitting it
-> to Wi-Fi, then autostart — is **[INSTRUCTIONS.md](INSTRUCTIONS.md)**, written
-> for exactly that job.
+### Or run the desktop app instead
+
+On the laptop that owns the printer, you do not need a terminal at all:
+
+```bash
+npm install
+npm run desktop        # or build the installer: npm run desktop:build
+```
+
+The app **is** the machine: it starts the print service, hosts the console, and
+opens on a live checklist of the six things that have to be true before a
+stranger can walk up and print. Every panel the console ever had is in there —
+Queue, Print codes, Printers, the printer connection, Settings, Access — plus
+**Account** for the licence and **Setup** for the machine itself.
+
+It also keeps the service alive: it starts with Windows, hides to the tray when
+the window is closed (guests keep printing), holds the laptop awake while jobs
+are in flight, streams the service log into the interface, and can run the
+project's own end-to-end suites against your printer on demand. It updates itself
+from GitHub Releases and says so in the status strip along the bottom.
+
+> Full detail, including packaging, updates and where the data lives:
+> **[docs/desktop-app.md](docs/desktop-app.md).**
 
 ### Printing nothing can lose
 
@@ -278,8 +301,9 @@ npm install && npm start        # guests: http://<machine-ip>:8088/print
 ```
 
 There is also a static-bundle path (`npm run build:web`) that publishes the
-**main site and the print site** — `public/admin/` is deliberately excluded, so a
-static host can never serve the control room. It cannot work against a plain
+**main site and the print site**. The console is not in `public/` at all any
+more — it lives in `desktop/renderer/` and ships inside the app — so a static
+host could not serve it even by accident. It cannot work against a plain
 `http` LAN backend (an `https` page may not call it), so put the backend behind
 HTTPS first. Details, the GitHub push and the `ALLOWED_ORIGINS` rules:
 **[docs/deploy.md](docs/deploy.md)**.
@@ -290,12 +314,13 @@ HTTPS first. Details, the GitHub push and the `ALLOWED_ORIGINS` rules:
 
 ## Troubleshooting
 
-- **“Admin sign-in required” everywhere** → the session expired or was revoked.
-  If the PIN is lost, delete `data/access.json` and restart.
+- **The app asks for a PIN you do not have** → it is a hash in `data/access.json`
+  and cannot be read back. Delete that file and restart: a fresh PIN is printed
+  in the log, and shown in the app's Setup panel.
 - **A guest says “No printer has that code”** → the code belongs to a deleted or
   paused printer, or it was mistyped. Codes are `PP-` plus 8 characters.
-- **Job lands in the Outbox** → no usable print path; Admin → Printer names the
-  reason.
+- **Job lands in the Outbox** → no usable print path; the app's Printer page
+  names the reason.
 - **No USB queue listed** → print one page from Notepad so Windows installs the
   driver queue, then press Locate.
 - **A shop job refuses to print** → it is unpaid by design. Colour or black &

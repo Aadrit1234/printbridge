@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
 <meta name="theme-color" content="#070b10">
 <meta name="robots" content="noindex, nofollow">
-<title>PrintBridge — Admin</title>
-<script src="/config.js"></script>
+<title>PrintBridge</title>
 <link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
 <link rel="apple-touch-icon" href="/assets/icon-192.png">
 <link rel="stylesheet" href="/assets/app.css">
-<link rel="stylesheet" href="/admin/admin.css">
+<link rel="stylesheet" href="/renderer/admin.css">
+<link rel="stylesheet" href="/renderer/app-desktop.css">
 </head>
 <body>
 <div class="app">
@@ -25,11 +25,15 @@
       </div>
       <div class="brand-text">
         <strong>PrintBridge</strong>
-        <span>admin control room</span>
+        <span>this machine</span>
       </div>
     </div>
 
     <nav class="nav" id="sidebar-nav">
+      <a class="nav-item" href="#/setup" data-route="setup">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h4l2-5 2 10 2-5h6"/></svg>
+        <span>Setup</span>
+      </a>
       <a class="nav-item" href="#/queue" data-route="queue">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
         <span>Queue</span>
@@ -56,6 +60,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6l7-3Z"/></svg>
         <span>Access</span>
       </a>
+      <a class="nav-item" href="#/account" data-route="account">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>
+        <span>Account</span>
+      </a>
     </nav>
 
     <div class="nav-foot">
@@ -65,6 +73,7 @@
       </a>
       <div class="small">The guest page has no link back here.</div>
       <div id="sidebar-printer">printer: connecting…</div>
+      <div id="sidebar-app">desktop app</div>
       <div class="row" style="margin-top:8px;gap:6px">
         <button class="icon-btn" id="btn-theme" title="Switch theme">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
@@ -121,13 +130,32 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6l7-3Z"/></svg>
       <span>Access</span>
     </a>
+    <a href="#/setup" data-route="setup">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h4l2-5 2 10 2-5h6"/></svg>
+      <span>Setup</span>
+    </a>
+    <a href="#/account" data-route="account">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>
+      <span>Account</span>
+    </a>
   </nav>
 
   <div class="toaster" id="toaster"></div>
   <div id="overlay-host"></div>
+
+  <!-- the machine's own strip: what this app is supervising, always visible -->
+  <footer id="desktop-statusbar" hidden>
+    <span class="sb-item" id="sb-service" data-state="warn">service…</span>
+    <span class="sb-item" id="sb-printer" data-state="warn">printer…</span>
+    <span class="sb-item" id="sb-mode">app</span>
+    <span class="sb-spacer"></span>
+    <span class="sb-item" id="sb-update">updates</span>
+    <button class="sb-btn" id="sb-restart" type="button">Restart service</button>
+    <button class="sb-btn" id="sb-data" type="button">Data folder</button>
+  </footer>
 </div>
 
 <div class="sr-only" role="status" id="live-region"></div>
-<script type="module" src="/admin/main.js"></script>
+<script type="module" src="/renderer/main.js"></script>
 </body>
 </html>

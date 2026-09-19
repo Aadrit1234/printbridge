@@ -1,0 +1,145 @@
+/* The desktop app's own layer.
+ *
+ * Everything here is additive: the console's design system (assets/app.css) is
+ * the base, and this file only styles what exists *because* the interface now
+ * runs inside the app — the setup checklist, the machine strip, and the handful
+ * of layout helpers the Setup and Account views use.
+ *
+ * Loaded after app.css, so these win at equal specificity on purpose.
+ */
+
+:root { --sb-h: 32px; }
+
+/* The machine strip sits below everything and never moves. */
+body { padding-bottom: var(--sb-h); }
+
+@media (max-width: 980px) {
+  #desktop-statusbar { display: none !important; }
+  body { padding-bottom: 0; }
+}
+
+#desktop-statusbar {
+  position: fixed; left: var(--sidebar-w); right: 0; bottom: 0; z-index: 30;
+  height: var(--sb-h);
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 14px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line);
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+#desktop-statusbar[hidden] { display: none; }
+#desktop-statusbar .sb-spacer { flex: 1; }
+#desktop-statusbar .sb-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#desktop-statusbar .sb-item::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--muted); flex: none;
+}
+#desktop-statusbar .sb-item[data-state="ok"]::before { background: var(--ready); }
+#desktop-statusbar .sb-item[data-state="warn"]::before { background: var(--queued); }
+#desktop-statusbar .sb-item[data-state="bad"]::before { background: var(--failed); }
+#desktop-statusbar .sb-btn {
+  border: 1px solid var(--line-strong); background: transparent; color: var(--text-2);
+  border-radius: var(--r-xs); padding: 3px 9px; font: inherit; font-size: 0.72rem;
+  cursor: pointer;
+}
+#desktop-statusbar .sb-btn:hover { border-color: var(--accent); color: var(--text); }
+#desktop-statusbar .sb-item[title] { cursor: help; }
+
+/* ---------------------------------------------------------------- headings */
+
+.section-head {
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between;
+  gap: 14px; margin-bottom: 22px;
+}
+.section-head h1 { font-size: clamp(1.4rem, 2.4vw, 1.9rem); letter-spacing: -0.02em; }
+.lead { margin-top: 8px; max-width: 78ch; color: var(--muted); font-size: 0.94rem; }
+
+.split {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px; align-items: start;
+}
+
+/* ---------------------------------------------------------------- checklist */
+
+.setup-list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
+.setup-step {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 14px; align-items: center;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.setup-step[data-state="done"] { border-color: color-mix(in srgb, var(--ready) 40%, var(--line)); }
+.setup-step[data-state="warn"] { border-color: color-mix(in srgb, var(--queued) 45%, var(--line)); }
+.setup-mark {
+  display: grid; place-items: center;
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  font-size: 0.9rem; font-weight: 700; color: var(--muted);
+}
+.setup-step[data-state="done"] .setup-mark { color: var(--ready); border-color: var(--ready); }
+.setup-step[data-state="warn"] .setup-mark { color: var(--queued); border-color: var(--queued); }
+.setup-title { display: flex; align-items: baseline; gap: 9px; font-weight: 650; font-size: 0.98rem; }
+.setup-num { font-family: var(--mono, ui-monospace); font-size: 0.72rem; color: var(--muted); letter-spacing: 0.08em; }
+.setup-detail { margin: 4px 0 0; font-size: 0.86rem; color: var(--muted); overflow-wrap: anywhere; }
+.setup-detail code { font-size: 0.82rem; color: var(--text-2); }
+
+/* ---------------------------------------------------------------- bits */
+
+.facts { margin: 0; }
+.facts > div {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+  padding: 8px 0; border-bottom: 1px solid var(--line);
+}
+.facts > div:last-child { border-bottom: 0; }
+.facts dt { font-size: 0.8rem; color: var(--muted); }
+.facts dd { margin: 0; font-size: 0.86rem; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.facts dd code { font-size: 0.78rem; font-weight: 500; color: var(--text-2); }
+
+.log {
+  margin: 12px 0 0; max-height: 260px; overflow: auto;
+  padding: 12px 14px; border-radius: var(--r-xs);
+  background: var(--sunken); border: 1px solid var(--line);
+  font-family: var(--mono, ui-monospace); font-size: 0.74rem; line-height: 1.6;
+  color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+.copyrow { display: flex; gap: 9px; align-items: stretch; margin: 10px 0; }
+.copyrow code {
+  flex: 1; min-width: 0; padding: 10px 12px;
+  border-radius: var(--r-xs); background: var(--sunken); border: 1px solid var(--line);
+  font-family: var(--mono, ui-monospace); font-size: 0.76rem; color: var(--text-2);
+  white-space: pre; overflow-x: auto;
+}
+
+.check { display: flex; gap: 10px; align-items: center; padding: 8px 0; font-size: 0.88rem; cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+
+.form { display: grid; gap: 12px; margin-top: 4px; }
+
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.list > li { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-xs); background: var(--surface-2); }
+
+.plan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.plan-list > li { padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--r-xs); }
+.plan-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.plan-price { font-family: var(--mono, ui-monospace); font-size: 0.86rem; color: var(--accent); }
+
+.tabs .tab {
+  border: 1px solid transparent; background: transparent; color: var(--muted);
+  padding: 5px 11px; border-radius: var(--r-pill, 999px); font: inherit; font-size: 0.8rem;
+  font-weight: 600; cursor: pointer;
+}
+.tabs .tab:hover { color: var(--text); }
+.tabs .tab.active { background: var(--surface-2); border-color: var(--line-strong); color: var(--text); }
+
+.chip.warn { color: var(--queued); border-color: color-mix(in srgb, var(--queued) 50%, transparent); }
+.chip.danger { color: var(--failed); border-color: color-mix(in srgb, var(--failed) 50%, transparent); }
+
+.card-head h2 svg { width: 18px; height: 18px; }

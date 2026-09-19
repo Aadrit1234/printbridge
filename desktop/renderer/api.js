@@ -1,15 +1,18 @@
-/* REST client for the admin API (/api/admin).
+/* REST client for the two admin-facing APIs.
  *
- * Every call carries the session cookie. A 401 means the session expired or was
- * revoked, so the app drops straight back to the sign-in screen. */
-
-/* Where the backend lives. Empty when the admin console is served by the
- * backend itself (same origin, cookies stay Strict same-site); a static
- * deployment points this at the backend's public URL in config.js, and the
- * backend must list that origin in ALLOWED_ORIGINS. */
-const CFG = window.PRINTBRIDGE_CONFIG || {};
-const ORIGIN = String(CFG.apiBase || '').replace(/\/+$/, '');
-const BASE = `${ORIGIN}/api/admin`;
+ *   /api/admin  the machine, behind the PIN — jobs, printers, the print path
+ *   /api/owner  the licence, behind an owner account — plans, account, printers
+ *
+ * Every call carries the session cookie. A 401 on the machine API means the
+ * session expired or was revoked, so the app drops straight back to the PIN
+ * screen.
+ *
+ * Both are same-origin: the desktop app's own host (desktop/host.js) serves
+ * this interface and proxies /api/* to the print service, so there is no origin
+ * to configure and no CORS to satisfy. */
+const ORIGIN = '';
+const BASE = '/api/admin';
+const OWNER_BASE = '/api/owner';
 export const API_ORIGIN = ORIGIN;
 
 export class ApiError extends Error {
@@ -25,7 +28,7 @@ export class ApiError extends Error {
 let onUnauthorized = () => {};
 export function setUnauthorizedHandler(fn) { onUnauthorized = fn || (() => {}); }
 
-async function request(path, { method = 'GET', body, headers = {}, raw = false } = {}) {
+async function send(base, path, { method = 'GET', body, headers = {}, raw = false } = {}) {
   const options = {
     method,
     // "include" also sends the session cookie when the API is cross-origin.
@@ -41,9 +44,9 @@ async function request(path, { method = 'GET', body, headers = {}, raw = false }
 
   let res;
   try {
-    res = await fetch(BASE + path, options);
+    res = await fetch(base + path, options);
   } catch {
-    throw new ApiError('Cannot reach the print server — is it still running?', 0, null);
+    throw new ApiError('Cannot reach the print service — is it still running?', 0, null);
   }
 
   const type = res.headers.get('content-type') || '';
@@ -51,7 +54,9 @@ async function request(path, { method = 'GET', body, headers = {}, raw = false }
 
   if (res.status === 401) {
     const error = new ApiError((payload && payload.error) || 'Sign-in required', 401, payload);
-    if (path !== '/login') onUnauthorized(error);
+    // Only the machine API re-arms the PIN screen; losing a licence session must
+    // not lock you out of the printer.
+    if (base === BASE && path !== '/login') onUnauthorized(error);
     throw error;
   }
   if (!res.ok) {
@@ -59,6 +64,9 @@ async function request(path, { method = 'GET', body, headers = {}, raw = false }
   }
   return raw ? res : payload;
 }
+
+function request(path, options) { return send(BASE, path, options); }
+function ownerRequest(path, options) { return send(OWNER_BASE, path, options); }
 
 export const api = {
   /* ---------------- access ---------------- */
@@ -122,7 +130,7 @@ export const api = {
   originalUrl: (id) => `${BASE}/files/${encodeURIComponent(id)}/original`,
   outboxUrl: (name) => `${BASE}/files/outbox/${encodeURIComponent(name)}`,
 
-  /** Admin upload (used by nothing by default, but the route exists). */
+  /** Upload through the admin API (the route exists; the guest page is the usual path). */
   upload(files, { options = {}, onProgress = () => {}, batchId } = {}) {
     return new Promise((resolve, reject) => {
       const form = new FormData();
@@ -133,6 +141,7 @@ export const api = {
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `${BASE}/jobs`);
+      // Same origin as this page: the host proxies it to the print service.
       xhr.withCredentials = true;
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) onProgress(e.loaded / e.total);
@@ -147,4 +156,77 @@ export const api = {
       xhr.send(form);
     });
   },
+};
+
+/* ---------------------------------------------------------------- owner API */
+
+/* The licence: a second identity on the same machine, and deliberately not the
+ * same session as the PIN. An owner account sees only its own printers. */
+
+export const ownerApi = {
+  plans: () => ownerRequest('/plans'),
+  session: () => ownerRequest('/session'),
+  signup: (body) => ownerRequest('/signup', { method: 'POST', body }),
+  login: (body) => ownerRequest('/login', { method: 'POST', body }),
+  logout: () => ownerRequest('/logout', { method: 'POST', body: {} }),
+  account: () => ownerRequest('/account'),
+  updateAccount: (patch) => ownerRequest('/account', { method: 'PATCH', body: patch }),
+  printers: () => ownerRequest('/printers'),
+};
+
+/* ---------------------------------------------------------------- the app */
+
+/* The Electron bridge. Present only inside the desktop app: the service
+ * lifetime, the folders, the login item, the power blocker, the process log,
+ * the real suites and updates are things a web page must not be able to do.
+ * Every one of them degrades to a rejected promise rather than a silent no-op,
+ * so a view can hide what it cannot offer. */
+
+const bridge = typeof window === 'undefined' ? null : (window.printbridgeDesktop || null);
+
+function desktopOnly(what) {
+  return Promise.reject(new Error(`${what} is only available in the desktop app`));
+}
+
+export const desktop = {
+  available: () => Boolean(bridge),
+
+  getInfo: () => (bridge ? bridge.getInfo() : desktopOnly('This')),
+  restartServer: () => (bridge ? bridge.restartServer() : desktopOnly('Restarting the service')),
+  openDataFolder: () => (bridge ? bridge.openDataFolder() : desktopOnly('Opening the data folder')),
+  openExternal: (url) => (bridge ? bridge.openExternal(url) : desktopOnly('Opening a browser')),
+  rememberPin: (pin) => (bridge ? bridge.rememberPin(pin) : Promise.resolve(false)),
+  runSelfTest: () => (bridge ? bridge.runSelfTest() : desktopOnly('The end-to-end suites')),
+
+  autostart: {
+    get: () => (bridge ? bridge.autostart.get() : Promise.resolve({ supported: false, enabled: false })),
+    set: (enabled) => (bridge ? bridge.autostart.set(enabled) : desktopOnly('Autostart')),
+  },
+
+  keepAwake: {
+    get: () => (bridge ? bridge.keepAwake.get() : Promise.resolve({ enabled: false })),
+    set: (enabled) => (bridge ? bridge.keepAwake.set(enabled) : desktopOnly('Staying awake')),
+  },
+
+  notifications: {
+    get: () => (bridge && bridge.notifications ? bridge.notifications.get() : Promise.resolve({ supported: false, enabled: false })),
+    set: (enabled) => (bridge && bridge.notifications ? bridge.notifications.set(enabled) : desktopOnly('Notifications')),
+  },
+
+  logs: {
+    get: () => (bridge ? bridge.logs.get() : Promise.resolve({ lines: [] })),
+    clear: () => (bridge ? bridge.logs.clear() : Promise.resolve(false)),
+    subscribe: (fn) => (bridge ? bridge.logs.subscribe(fn) : () => {}),
+  },
+
+  /** The menu bar and tray switch panels through this. */
+  onNavigate: (fn) => (bridge && bridge.onNavigate ? bridge.onNavigate(fn) : () => {}),
+
+  /* null in a browser, so a view can test for it before offering updates. */
+  updates: bridge && bridge.updates ? {
+    status: () => bridge.updates.status(),
+    check: () => bridge.updates.check(),
+    install: () => bridge.updates.install(),
+    subscribe: (fn) => bridge.updates.subscribe(fn),
+  } : null,
 };

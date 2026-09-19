@@ -14,9 +14,9 @@
  *   PRINTBRIDGE_API_URL    origin of the backend (required, unless "same-origin")
  *   OUT_DIR                optional: output directory (default dist)
  *
- * public/admin/ is deliberately NOT copied: this bundle is the public guest
- * site, and the control room stays on the machine that runs the server. A
- * static host therefore cannot serve somebody an admin console to poke at.
+ * The console is deliberately NOT here: it is part of the desktop app, served
+ * on loopback by that app, so a static host has nothing administrative to hand
+ * out even by accident.
  *
  * The backend must list the frontend's origin in ALLOWED_ORIGINS, otherwise the
  * browser blocks every call. See docs/deploy.md.
@@ -59,11 +59,12 @@ if (apiBase && !/^https?:\/\/[^/\s]+$/.test(apiBase)) {
 /* ---------------- copy ---------------- */
 
 /* Surfaces that must never leave the machine running the server:
- *   admin/  the control room — every job, every printer, the machine itself
  *   owner/  the customer's console, which signs in with a same-origin cookie
- * Neither can be trusted from a static host, and both are more at home next to
- * the printer. The bundle is the public site: main + print. */
-const PRIVATE = new Set(['admin', 'owner']);
+ *
+ * The machine console is not on this list because it is not here at all: it
+ * lives in desktop/renderer/ and ships inside the desktop app. The bundle is
+ * the public site — main + print. */
+const PRIVATE = new Set(['owner']);
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.cpSync(SRC, OUT, {
@@ -93,6 +94,7 @@ fs.writeFileSync(path.join(OUT, 'deployment.json'), JSON.stringify({
   apiBase: apiBase || '(same origin as this page)',
   adminBase: adminBase || '(same origin as this page)',
   includesAdmin: false,
+  includesDesktop: false,
   includesOwner: false,
   version: require(path.join(ROOT, 'package.json')).version,
 }, null, 2) + '\n');
@@ -113,7 +115,7 @@ console.log('  frontend bundle built');
 console.log(`  output      ${path.relative(ROOT, OUT)} (${files.length} files)`);
 console.log(`  apiBase     ${apiBase || '(same origin as this page)'}`);
 console.log(`  adminBase   ${adminBase || '(same origin as this page)'}`);
-console.log('  private     admin/ and owner/ excluded (they live on the print server)');
+console.log('  private     owner/ excluded (the console lives in the desktop app)');
 console.log('');
 console.log('  Remember to allow this site on the backend:');
 console.log(`    ALLOWED_ORIGINS=https://<this-site's-domain>`);

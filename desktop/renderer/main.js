@@ -4,7 +4,7 @@
  * carries the session cookie, and a 401 anywhere drops the UI back to the PIN
  * screen instead of showing half-loaded controls. */
 
-import { api, setUnauthorizedHandler } from './api.js';
+import { api, setUnauthorizedHandler, desktop } from './api.js';
 import { bootstrap, store, connectEvents, disconnectEvents } from './store.js';
 import { applyTheme, currentTheme, toggleTheme } from '../app/theme.js';
 import { esc, icons, setThumbUrlBuilder, toast } from '../app/ui.js';
@@ -12,22 +12,37 @@ import { esc, icons, setThumbUrlBuilder, toast } from '../app/ui.js';
 // The shared UI kit renders thumbnails; admin ones come from the admin API.
 setThumbUrlBuilder(api.thumbUrl);
 
+import * as setupView from './views/setup.js';
 import * as queueView from './views/queue.js';
 import * as codesView from './views/codes.js';
 import * as printersView from './views/printers.js';
 import * as printerView from './views/printer.js';
 import * as settingsView from './views/settings.js';
 import * as accessView from './views/access.js';
+import * as accountView from './views/account.js';
 
 const viewHost = document.getElementById('view');
 const routes = [
+  { match: /^#\/setup\/?$/, view: setupView, name: 'setup', title: 'Setup' },
   { match: /^#\/queue\/?$/, view: queueView, name: 'queue', title: 'Queue' },
   { match: /^#\/codes\/?$/, view: codesView, name: 'codes', title: 'Print codes' },
   { match: /^#\/printers\/?$/, view: printersView, name: 'printers', title: 'Printers' },
   { match: /^#\/printer\/?$/, view: printerView, name: 'printer', title: 'Printer' },
   { match: /^#\/settings\/?$/, view: settingsView, name: 'settings', title: 'Settings' },
   { match: /^#\/access\/?$/, view: accessView, name: 'access', title: 'Access' },
+  { match: /^#\/account\/?$/, view: accountView, name: 'account', title: 'Account' },
 ];
+
+/* Where the app opens. Setup first on a fresh install — it is the page that
+ * tells you what is missing — then wherever you were last. */
+function startRoute() {
+  try {
+    const saved = localStorage.getItem('pb.desktop.route');
+    if (saved && routes.some(r => `#/${r.name}` === saved)) return saved;
+  } catch { /* private mode */ }
+  const ready = store.state.ready;
+  return ready ? '#/setup' : '#/setup';
+}
 
 let current = null;
 let signedIn = false;
@@ -57,8 +72,8 @@ function loginShell(message) {
   <div class="login-wrap">
     <div class="card login-card">
       <div class="login-mark">${icons.shield}</div>
-      <h1>Admin sign-in</h1>
-      <p>Enter the PIN to manage the printer, the queue and everyone's jobs.</p>
+      <h1>This machine is locked</h1>
+      <p>The console runs here, in the app, and nowhere else on the network. Enter the machine PIN to manage the printer, the queue and everyone's jobs.</p>
       <form id="login-form" autocomplete="off">
         <div class="pin-field">
           <input class="input pin-input" id="login-pin" type="password" inputmode="numeric"
@@ -122,6 +137,8 @@ export function showLogin({ message = '' } = {}) {
     button.textContent = 'Checking…';
     try {
       await api.login(pin);
+      // Kept in memory by the app so the end-to-end suites can sign in too.
+      desktop.rememberPin(pin).catch(() => {});
       await enterApp();
     } catch (err) {
       error.textContent = err.message || 'Sign-in failed';
@@ -152,8 +169,7 @@ async function enterApp() {
     connectEvents();
   }
 
-  const first = viewHost.querySelector('.view-layer');
-  if (first && !location.hash) location.hash = '#/queue';
+  if (!location.hash) location.hash = startRoute();
   await render();
   paintStatus();
   paintBadges();
@@ -167,7 +183,7 @@ function signOut(reason = '') {
 /* ---------------- routing ---------------- */
 
 function resolveRoute() {
-  const hash = location.hash || '#/queue';
+  const hash = location.hash || '#/setup';
   for (const route of routes) {
     const m = hash.match(route.match);
     if (m) return { route, params: {} };
@@ -215,7 +231,10 @@ export async function navigate(hash, { replace = false } = {}) {
   else location.hash = hash;
 }
 
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => {
+  try { localStorage.setItem('pb.desktop.route', location.hash); } catch { /* private mode */ }
+  render();
+});
 
 /* ---------------- live status ---------------- */
 
@@ -244,6 +263,85 @@ function paintStatus() {
       ? `printer: ${printer.state.name || printer.active.id} · ${status}`
       : 'printer: connecting…';
   }
+
+  const sbPrinter = document.getElementById('sb-printer');
+  if (sbPrinter) {
+    sbPrinter.textContent = printer
+      ? `${printer.active.label} · ${status}`
+      : 'printer: not read yet';
+    sbPrinter.dataset.state = ['ready', 'busy', 'printing'].includes(status) ? 'ok' : 'warn';
+  }
+}
+
+/* ---------------- the machine strip ---------------- */
+
+async function wireStatusBar() {
+  const bar = document.getElementById('desktop-statusbar');
+  if (!bar) return;
+  bar.hidden = false;
+
+  const info = await desktop.getInfo().catch(() => null);
+  const mode = document.getElementById('sb-mode');
+  if (mode) mode.textContent = info ? `${info.packaged ? 'app' : 'dev'} ${info.version}` : 'browser';
+
+  const service = document.getElementById('sb-service');
+  const update = document.getElementById('sb-update');
+
+  const restart = document.getElementById('sb-restart');
+  const openData = document.getElementById('sb-data');
+  if (!desktop.available()) {
+    if (restart) restart.hidden = true;
+    if (openData) openData.hidden = true;
+    if (update) update.hidden = true;
+    return;
+  }
+
+  restart?.addEventListener('click', async () => {
+    restart.disabled = true;
+    restart.textContent = 'Restarting…';
+    await desktop.restartServer().catch((error) => toast('Restart failed', error.message, 'err'));
+    toast('The print service is restarting', '', 'info');
+    setTimeout(() => {
+      restart.disabled = false;
+      restart.textContent = 'Restart service';
+      window.location.reload();
+    }, 2600);
+  });
+
+  openData?.addEventListener('click', () => {
+    desktop.openDataFolder().catch((error) => toast('Could not open the folder', error.message, 'err'));
+  });
+
+  const paintUpdate = (state) => {
+    if (!update) return;
+    const labels = {
+      checking: 'checking for updates…',
+      current: 'up to date',
+      available: 'update available',
+      downloading: 'downloading update…',
+      ready: 'restart to update',
+      error: 'update check failed',
+      off: 'updates off',
+    };
+    update.textContent = labels[state && state.kind] || 'updates';
+    update.dataset.state = (state && state.kind) === 'current' ? 'ok' : (state && state.kind) === 'error' ? 'bad' : 'warn';
+  };
+
+  if (desktop.updates) {
+    desktop.updates.status().then(paintUpdate).catch(() => {});
+    desktop.updates.subscribe(paintUpdate);
+    update?.addEventListener('click', () => {
+      paintUpdate({ kind: 'checking' });
+      desktop.updates.check().catch((error) => paintUpdate({ kind: 'error', message: error.message }));
+    });
+    update.title = 'Check for a new version';
+  } else if (update) {
+    paintUpdate({ kind: 'off' });
+  }
+
+  // The service's own state, straight from the app, not the browser's idea of it.
+  if (service) service.textContent = `service · port ${info ? info.port : '?'}${info && info.startedByUs ? '' : ' (external)'}`;
+  service.dataset.state = 'ok';
 }
 
 function paintBadges() {
@@ -303,6 +401,14 @@ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ()
 /* ---------------- boot ---------------- */
 
 applyTheme(currentTheme());
+wireStatusBar();
+
+// Panels ▸ … in the menu bar and the tray icons land here.
+desktop.onNavigate((hash) => {
+  if (!hash) return;
+  if (location.hash === hash) render();
+  else location.hash = hash;
+});
 
 api.session().then((status) => {
   if (status.authenticated) return enterApp();

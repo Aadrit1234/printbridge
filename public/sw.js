@@ -9,12 +9,11 @@
  *
  * API calls and preview images are never cached — they are live state. */
 
-const VERSION = 'pb-v16';
+const VERSION = 'pb-v17';
 /* Only the walk-up print site is cached: a phone that scanned the QR keeps
- * working on a flaky connection. The admin console is deliberately never
- * cached — it must always be the current build, and it is useless offline
- * anyway. The marketing site is not cached either; it is not what anyone needs
- * when the network is down. */
+ * working on a flaky connection. The marketing site is not cached: it is not
+ * what anyone needs when the network is down. The console is not cached either
+ * because it is not served from here at all — it lives in the desktop app. */
 const SHELL = [
   '/print/',
   '/print/index.html',
@@ -70,13 +69,9 @@ self.addEventListener('fetch', (event) => {
   // Live state: always the network.
   if (url.pathname.startsWith('/api/')) return;
 
-  // The admin app is never cached or served from cache — including the shared
-  // /app/* modules it imports, which must never be a version behind the admin
-  // code that is using them.
-  if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) return;
-  try {
-    if (new URL(request.referrer).pathname.startsWith('/admin')) return;
-  } catch { /* no referrer — treat as a guest request */ }
+  /* The machine console used to be served from /admin and had to be kept out of
+   * every cache. It is not served here at all any more — it lives in the desktop
+   * app — so this worker only ever deals with the guest surfaces below. */
 
   // Documents: network first, cache only as an offline fallback. Only the
   // print site may be answered offline — anything else (the marketing site)
