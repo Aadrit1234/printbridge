@@ -31,3 +31,6 @@ Thumbs.db
 .freebuff/
 
 .vercel
+.env*
+# the template is meant to be committed and reviewed — keep it visible
+!.env.example
