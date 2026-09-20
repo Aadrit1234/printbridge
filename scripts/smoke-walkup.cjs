@@ -31,6 +31,7 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const BASE = process.env.BASE || 'http://localhost:8088';
 const GS = '/api/v1';
 const AS = '/api/admin';
+const OS = '/api/owner';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const PASSWORD = process.env.ADMIN_PASSWORD || process.env.ADMIN_PIN;
 /* An explicit DATA_DIR wins; otherwise this is filled in from the server's own
@@ -68,7 +69,7 @@ async function req(url, { method = 'GET', body, device = DEVICE, form = null, ad
   });
   const type = res.headers.get('content-type') || '';
   const payload = type.includes('json') ? await res.json().catch(() => null) : await res.text();
-  return { status: res.status, payload };
+  return { status: res.status, payload, headers: res.headers };
 }
 
 async function sentDocument(lines = 2) {
@@ -256,6 +257,22 @@ async function main() {
       ok('a foreign origin is refused outright', foreignPost.status === 403, `${foreignPost.status} ${JSON.stringify(foreignPost.payload)}`);
     } else {
       ok('no allowlist set, so the API stays open to this network (skipped)', true, 'set ALLOWED_ORIGINS to exercise the refusal');
+    }
+
+    /* Two loopback ports are the same machine but still two origins to a
+     * browser, so a local page must get the CORS headers — the desktop app's
+     * own host and any dev server on 5173 depend on it. Getting this wrong
+     * shows up as "everything on this laptop is broken, everything on the LAN
+     * works", which is a miserable afternoon. */
+    const baseHost = new URL(BASE).hostname;
+    const loopbackServer = baseHost === 'localhost' || baseHost === '::1' || /^127\.\d+\.\d+\.\d+$/.test(baseHost);
+    if (loopbackServer) {
+      const localPage = await req(`${OS}/plans`, { origin: 'http://localhost:5173' });
+      ok('a page on another loopback port is allowed to read our answers',
+        localPage.status === 200 && localPage.headers.get('access-control-allow-origin') === 'http://localhost:5173',
+        `${localPage.status} allow-origin=${localPage.headers.get('access-control-allow-origin')}`);
+    } else {
+      console.log('  (this base is not loopback — skipped the local-page CORS check)');
     }
 
     /* ---------------- codes are scoped to one device ---------------- */

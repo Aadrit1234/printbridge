@@ -58,19 +58,22 @@ if (apiBase && !/^https?:\/\/[^/\s]+$/.test(apiBase)) {
 }
 /* ---------------- copy ---------------- */
 
-/* Surfaces that must never leave the machine running the server:
- *   owner/  the customer's console, which signs in with a same-origin cookie
+/* Nothing is withheld from this bundle any more, and the reason is worth
+ * writing down. `owner/` used to be excluded, because its session cookie was
+ * same-site only — on a static host that page could sign in and then lose the
+ * session on the next request. That is now handled where it belongs: the cookie
+ * is built SameSite=None; Secure for an allowlisted cross-site origin
+ * (src/cookies.js), so the page works from the site and from this machine.
  *
- * The machine console is not on this list because it is not here at all: it
- * lives in desktop/renderer/ and ships inside the desktop app. The bundle is
- * the public site — main + print. */
-const PRIVATE = new Set(['owner']);
+ * It has to be here besides: the whole sale ends on it. A buyer pays, gets a
+ * code by email, and registers at /owner — a deploy that answers /owner with
+ * the marketing page is a dead end.
+ *
+ * The *machine* console is a different thing and is not part of this bundle at
+ * all: it lives in desktop/renderer/ and ships inside the desktop app. */
 
 fs.rmSync(OUT, { recursive: true, force: true });
-fs.cpSync(SRC, OUT, {
-  recursive: true,
-  filter: (source) => !PRIVATE.has(path.basename(source)),
-});
+fs.cpSync(SRC, OUT, { recursive: true });
 
 /* ---------------- runtime config ---------------- */
 
@@ -95,7 +98,7 @@ fs.writeFileSync(path.join(OUT, 'deployment.json'), JSON.stringify({
   adminBase: adminBase || '(same origin as this page)',
   includesAdmin: false,
   includesDesktop: false,
-  includesOwner: false,
+  includesOwner: true,
   version: require(path.join(ROOT, 'package.json')).version,
 }, null, 2) + '\n');
 
@@ -115,7 +118,7 @@ console.log('  frontend bundle built');
 console.log(`  output      ${path.relative(ROOT, OUT)} (${files.length} files)`);
 console.log(`  apiBase     ${apiBase || '(same origin as this page)'}`);
 console.log(`  adminBase   ${adminBase || '(same origin as this page)'}`);
-console.log('  private     owner/ excluded (the console lives in the desktop app)');
+console.log('  owner/      included — buyers register there after checkout');
 console.log('');
 console.log('  Remember to allow this site on the backend:');
 console.log(`    ALLOWED_ORIGINS=https://<this-site's-domain>`);

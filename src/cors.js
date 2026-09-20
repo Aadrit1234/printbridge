@@ -19,8 +19,11 @@
  * A page and the service both on loopback are the same machine, however their
  * ports differ: the desktop app serves its console from an ephemeral loopback
  * port and proxies to the service on another one, and a dev server on 5173 does
- * the same. Those are never treated as cross-site, or configuring an allowlist
- * for the public site would lock the machine's own console out of its API.
+ * the same. Those are allowed without an allowlist entry — a local page was
+ * served by software on this machine anyway — but they are still cross-origin
+ * as far as the browser is concerned, so they get the headers like anyone else.
+ * The session cookie stays Strict for them: localhost to localhost is the same
+ * *site* (only the port differs), so Strict is sent and is the safer choice.
  *
  * And when an allowlist *is* configured, a cross-site request from an origin
  * that is not on it is refused outright (403). No CORS headers alone would let
@@ -95,12 +98,24 @@ function isLocalPair(req) {
   return isLoopback(hostOf(origin)) && isLoopback(hostOf(own));
 }
 
-/** True when this request comes from an allowlisted cross-site origin. */
+/**
+ * True when this request comes from an origin allowed to read our answers.
+ *
+ * A loopback pair is allowed — and it is allowed by *sending the CORS headers*,
+ * which is the part that is easy to get wrong. "Same machine" is a fact about
+ * the request; CORS is a fact about the browser's origins, and the browser
+ * compares scheme+host+port. A page on 127.0.0.1:5173 calling an API on
+ * 127.0.0.1:8088 is a cross-origin request with everything that implies: no
+ * Access-Control-Allow-Origin, and the browser discards the response no matter
+ * how local it was. So the exemption suppresses the *refusal*, never the
+ * headers. (It does mean an allowlist is not needed for a local dev server — a
+ * local page was served by software running on this machine either way.)
+ */
 function isAllowedCrossSite(req) {
   const origin = originOf(req);
   if (!origin) return false;
   if (origin === sameOrigin(req)) return false;
-  if (isLocalPair(req)) return false;
+  if (isLocalPair(req)) return true;
   return allowedOrigins().includes(origin);
 }
 
@@ -133,7 +148,9 @@ function middleware() {
       res.setHeader('Access-Control-Allow-Headers', HEADERS);
       res.setHeader('Access-Control-Max-Age', MAX_AGE);
       res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
-      req.crossSite = true;
+      /* SameSite=None is only for a genuinely different site. A loopback pair is
+       * one site on two ports, so its cookie can — and should — stay Strict. */
+      if (!isLocalPair(req)) req.crossSite = true;
 
       if (req.method === 'OPTIONS') {
         res.status(204).end();

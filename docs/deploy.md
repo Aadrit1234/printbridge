@@ -7,7 +7,7 @@ is the whole of this document.
 |---|---|---|---|
 | **Main site** | `/` | the public — company, product, features, pricing, contact | the print server, *and optionally* a static host (Vercel) |
 | **Print site** | `/print` | whoever is standing at the printer | the print server, *and optionally* the same static host |
-| **Owner site** | `/owner` | the licence holder: redeem a code, sign in | **only** the print server |
+| **Owner site** | `/owner` | the licence holder: redeem a code, sign in, download the app | the print server, *and* the same static host — the sale ends here, so a deploy that answered this with the marketing page would be a dead end |
 | **The console** | the desktop app | the machine's sign-in, or an owner account | **only** the app, on `127.0.0.1` |
 | **API** | `/api/v1`, `/api/owner`, `/api/admin` | the sites and the app | only the print server |
 
@@ -23,7 +23,22 @@ limitation to work around — it is the design:
 The **console is not a web page at all**. It ships inside the desktop app, which
 serves it on `127.0.0.1` and proxies the API from the same origin, so there is
 even less to get wrong: no public host can serve it, and no browser on the LAN
-can reach it. `npm run build:web` publishes the guest surfaces only.
+can reach it. `npm run build:web` publishes the public surfaces — the main site,
+the print page and `/owner` — and nothing administrative.
+
+`/owner` is in that bundle because the purchase ends on it: pay, get the code by
+email, register, download the app. It signs in against the backend named by
+`apiBase`, which is a **different origin** from the static host, so two things
+have to be true and both are handled here rather than by the reader:
+
+* the static origin is listed in `ALLOWED_ORIGINS`, and
+* its session cookie is built `SameSite=None; Secure` (src/cookies.js), because
+  a `Strict` cookie is simply not sent from another site — which looks exactly
+  like "it signed me in and then forgot me".
+
+A local page on another port (a dev server, the app's own host) is treated as
+first-party: it gets the CORS headers, but keeps a `Strict` cookie, since
+localhost to localhost is the same site on two ports.
 
 ---
 

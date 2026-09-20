@@ -16,31 +16,21 @@
   /* ----------------------------------------------------------
      Where the control room lives
      ----------------------------------------------------------
-     This site is often hosted somewhere other than the machine that runs the
-     printer (Vercel, for instance), and the owner console only exists on that
-     machine. config.js names it; the Log in button follows.
+     /owner stays on this site, and that is deliberate. It used to be
+     redirected to the machine, back when the owner console only lived there —
+     but the sale now ends on it: buy, get the code by email, register here,
+     download the app. Sending a buyer to a machine that may be switched off
+     would break the one flow that has to work, so the page ships in this bundle
+     and talks to the backend named by apiBase (cross-site, with a cookie built
+     for exactly that — see src/cookies.js).
 
-     The machine console is a different story: it is part of the desktop app and
-     has no URL at all, here or there. */
+     /admin is the opposite story: the control room is part of the desktop app
+     and has no URL on any host. A bookmarked /admin is handed to the backend,
+     whose page says where the console went. */
   var CFG = window.PRINTBRIDGE_CONFIG || {};
   var ADMIN_BASE = String(CFG.adminBase || "").replace(/\/+$/, "");
-  if (ADMIN_BASE) {
-    var gatedLinks = document.querySelectorAll('a[href^="/owner"]');
-    for (var a = 0; a < gatedLinks.length; a++) {
-      gatedLinks[a].setAttribute("href", ADMIN_BASE + gatedLinks[a].getAttribute("href"));
-      gatedLinks[a].setAttribute("rel", "noopener");
-    }
-    // A static host has no /owner, and most of them answer with this page.
-    // Send anyone who asked for it to the machine that has it.
-    if (/^\/owner(\/|$)/.test(location.pathname)) {
-      location.replace(ADMIN_BASE + "/owner/");
-    }
-    // /admin was the old control room. It does not exist on any host any more —
-    // but it may be bookmarked, so hand those visitors the page that says where
-    // the console went instead of a homepage that pretends nothing happened.
-    if (/^\/admin(\/|$)/.test(location.pathname)) {
-      location.replace(ADMIN_BASE + "/admin");
-    }
+  if (ADMIN_BASE && /^\/admin(\/|$)/.test(location.pathname)) {
+    location.replace(ADMIN_BASE + "/admin");
   }
 
   /* ----------------------------------------------------------

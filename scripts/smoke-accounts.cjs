@@ -65,7 +65,7 @@ async function req(url, { method = 'GET', body, headers = {}, cookie = '', key =
   });
   const type = res.headers.get('content-type') || '';
   const payload = type.includes('json') ? await res.json().catch(() => null) : null;
-  return { status: res.status, payload, cookie: cookieOf(res) };
+  return { status: res.status, payload, cookie: cookieOf(res), headers: res.headers };
 }
 
 /* Anything minted by this run is deleted before it exits. */
@@ -128,11 +128,19 @@ async function main() {
 
   /* ---------------- buying: the checkout, the order, the code ---------------- */
 
+  /* The checkout is throttled per address (the ledger is open to anyone with the
+   * link, so it has to be). Running this suite five times in an hour trips that
+   * — say so and move on rather than reporting a wall of false failures. */
   const orderEmail = `buyer+${stamp}@example.test`;
   const badAddress = await req(`${OS}/orders`, {
     method: 'POST',
     body: { plan: 'shop-lifetime', name: 'No Address', email: orderEmail, address: { line1: 'x' } },
   });
+  const ordersBlocked = badAddress.status === 429;
+  if (ordersBlocked) {
+    console.log(`\n  the checkout is throttled for this address (${badAddress.payload && badAddress.payload.error})`);
+    console.log('  — skipping the order checks. Wait for the window to pass, or restart the server.\n');
+  } else {
   ok('an order without a billing address is refused', badAddress.status === 400,
     `${badAddress.status} ${badAddress.payload && badAddress.payload.error}`);
 
@@ -222,6 +230,7 @@ async function main() {
   ok('the download URL points at a published release for this version',
     download && /releases\/download\/v[0-9]+\.[0-9]+\.[0-9]+\//.test(download.primary.url),
     download && download.primary && download.primary.url);
+  }
 
   /* ---------------- redeeming ---------------- */
 
@@ -302,6 +311,46 @@ async function main() {
   ok('the session names the account', session.status === 200 && session.payload.authenticated === true &&
     session.payload.account && session.payload.account.email === email,
     JSON.stringify(session.payload && session.payload.account));
+
+  /* The site is often deployed somewhere else (Vercel) while this machine
+   * serves the API, so a buyer signing in there is another origin: the session
+   * cookie has to be SameSite=None; Secure or it signs in once and is forgotten
+   * on the next page. The origin comes from the allowlist itself. */
+  const allowlist = String(process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const isLoopbackOrigin = (value) => {
+    try {
+      const host = new URL(value).hostname;
+      return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host);
+    } catch { return false; }
+  };
+  /* A local dev server on another port is the same *site*, so that cookie must
+   * stay Strict even though the request is cross-origin. Only a genuinely
+   * different site needs None; Secure. */
+  const foreign = allowlist.find(origin => !isLoopbackOrigin(origin));
+  const localPage = allowlist.find(isLoopbackOrigin);
+  if (localPage) {
+    const fromLocalPage = await req(`${OS}/login`, {
+      method: 'POST', headers: { origin: localPage }, body: { email, password: 'a-long-enough-password' },
+    });
+    const raw = fromLocalPage.headers.get('set-cookie') || '';
+    ok('a local page on another port gets the CORS headers, and a Strict cookie',
+      fromLocalPage.headers.get('access-control-allow-origin') === localPage && /SameSite=Strict/.test(raw),
+      raw.split(';').slice(1).join(';'));
+  }
+  if (foreign) {
+    const crossSiteLogin = await req(`${OS}/login`, {
+      method: 'POST', headers: { origin: foreign }, body: { email, password: 'a-long-enough-password' },
+    });
+    const raw = crossSiteLogin.headers.get('set-cookie') || '';
+    ok('a sign-in from the deployed site is allowed to read the answer',
+      crossSiteLogin.headers.get('access-control-allow-origin') === foreign,
+      `${crossSiteLogin.headers.get('access-control-allow-origin')} for ${foreign}`);
+    ok('and gets a cookie built for crossing sites',
+      /SameSite=None/.test(raw) && /Secure/.test(raw),
+      raw.split(';').slice(1).join(';'));
+  } else {
+    console.log('  (no non-loopback origin in ALLOWED_ORIGINS — skipped the cross-site cookie check)');
+  }
 
   /* ---------------- what an owner may see ---------------- */
 
