@@ -141,5 +141,67 @@ body { padding-bottom: var(--sb-h); }
 
 .chip.warn { color: var(--queued); border-color: color-mix(in srgb, var(--queued) 50%, transparent); }
 .chip.danger { color: var(--failed); border-color: color-mix(in srgb, var(--failed) 50%, transparent); }
+.chip.ok { color: var(--ready); border-color: color-mix(in srgb, var(--ready) 45%, transparent); }
+
+/* ---------------------------------------------------------------- the business panels
+ *
+ * Pricing, expenses and revenue are the panels a machine's app does not have,
+ * so their fittings live here rather than in the shared kit: a sync strip that
+ * says whether the machine holds the same numbers, a figure row, and lists that
+ * each read as one line per thing.
+ */
+
+.sync-strip {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; margin: 0 0 14px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+/* A row of figures — revenue, expenses, net; or this month / last 30 / all time. */
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.stat {
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface); display: grid; gap: 4px;
+}
+.stat b { font-size: 1.32rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat .muted { margin: 0; }
+.is-negative { color: var(--failed); }
+.is-positive { color: var(--ready); }
+
+/* One line per printer / service / expense / category. */
+.line, .rate-row, .exp-row, .cat-row, .svc-row, .conn-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 11px 0; border-top: 1px solid var(--line);
+}
+.line:first-of-type, .rate-row:first-of-type, .exp-row:first-of-type { border-top: 0; }
+.line > span:first-child, .cat-row > span:first-child { min-width: 0; }
+.line b, .cat-row b { font-variant-numeric: tabular-nums; }
+
+/* Rates are edited in place: the row *is* the form. */
+.rate-row { flex-wrap: wrap; }
+.rate-name { min-width: 190px; flex: 1 1 190px; display: grid; gap: 2px; }
+.rate-field { display: grid; gap: 3px; font-size: 0.74rem; color: var(--muted); }
+.rate-field .input { width: 108px; padding: 6px 9px; }
+.rate-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.money { font-family: var(--mono, ui-monospace); font-variant-numeric: tabular-nums; }
+
+.svc-form, .client-form { gap: 8px; align-items: center; }
+.svc-form .input { flex: 1; min-width: 150px; }
+
+/* The day-by-day table: numbers aligned, no decoration. */
+.rep-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.86rem; }
+.rep-table th, .rep-table td { text-align: right; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+.rep-table th:first-child, .rep-table td:first-child { text-align: left; }
+.rep-table th { color: var(--muted); font-weight: 600; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.rep-table td { font-variant-numeric: tabular-nums; }
+
+/* Machines: which printer this console is looking at. */
+.conn-row:first-of-type { border-top: 0; }
+.conn-row.is-current { border-left: 2px solid var(--accent); padding-left: 10px; }
+.conn-name { font-weight: 560; display: flex; align-items: center; gap: 7px; }
+.conn-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; color: var(--muted); font-size: 0.78rem; }
+.conn-sub code { font-family: var(--mono, ui-monospace); }
+.conn-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
 .card-head h2 svg { width: 18px; height: 18px; }

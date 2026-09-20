@@ -1,0 +1,105 @@
+/* The customer app's window.
+ *
+ * It borrows the product's design system (public/assets/app.css: tokens, cards,
+ * buttons, chips) and adds only what is specific to this window: a header that
+ * says which printer you are about to use, and a list of machines that reads as
+ * one line each. */
+
+body.client {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 0;
+  background: var(--bg);
+}
+
+.client-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px var(--pad);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  backdrop-filter: blur(8px);
+}
+
+.client-brand { display: flex; align-items: center; gap: 12px; }
+.client-brand strong { display: block; font-size: 15px; letter-spacing: -0.01em; }
+.client-brand span { display: block; font-size: 12.5px; color: var(--muted); }
+
+.client-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--accent-2);
+}
+.client-mark svg { width: 20px; height: 20px; }
+
+.client-head-actions { display: flex; gap: 8px; }
+
+.client-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: var(--pad);
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.client-main .card { padding: 18px; }
+.client-main .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.client-main .card-head h2 { font-size: 15px; margin: 0; }
+.client-main .card > p { margin: 6px 0 14px; }
+
+.client-list { display: flex; flex-direction: column; gap: 8px; }
+
+.client-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.client-item.is-current { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--surface-2); }
+.client-item-main { min-width: 0; }
+.client-item-name { display: flex; align-items: center; gap: 8px; font-weight: 560; font-size: 14px; }
+.client-item-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 5px; color: var(--muted); font-size: 12px; }
+.client-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.client-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ready);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ready) 22%, transparent);
+}
+
+.client-form { gap: 8px; align-items: center; }
+.client-form .input { flex: 1; min-width: 200px; }
+
+.chip.warn { border-color: color-mix(in srgb, var(--failed) 40%, var(--line)); color: color-mix(in srgb, var(--failed) 78%, var(--text)); }
+.mono { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
+
+.client-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px var(--pad) 18px;
+  border-top: 1px solid var(--line);
+}
+.client-foot a { text-decoration: none; }
+.client-foot a:hover { color: var(--text); }

@@ -34,6 +34,7 @@ function collect() {
   };
   walk(path.join(ROOT, 'public', 'app'));
   walk(path.join(ROOT, 'desktop', 'renderer'));
+  walk(path.join(ROOT, 'desktop', 'client-ui'));
   return out.sort();
 }
 

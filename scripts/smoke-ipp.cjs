@@ -8,8 +8,8 @@
  *   • a job sent while the printer is unreachable keeps trying, and prints
  *     by itself the moment the printer comes back
  *
- *   ADMIN_PIN=123456 node scripts/smoke-ipp.cjs
- *   ADMIN_PIN=123456 BASE=http://192.168.1.20:8088 node scripts/smoke-ipp.cjs
+ *   ADMIN_PASSWORD=… node scripts/smoke-ipp.cjs
+ *   ADMIN_PASSWORD=… BASE=http://192.168.1.20:8088 node scripts/smoke-ipp.cjs
  *
  * The script starts scripts/fake-printer.cjs on a free port, switches the
  * server's print connection to it, and restores the previous settings and jobs
@@ -27,7 +27,8 @@ const BASE = process.env.BASE || 'http://localhost:8088';
 const GS = '/api/v1';
 const AS = '/api/admin';
 const DEVICE = 'dev_ipp_smoke';
-const PIN = process.env.ADMIN_PIN;
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const PASSWORD = process.env.ADMIN_PASSWORD || process.env.ADMIN_PIN;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 let cookie = '';
@@ -143,9 +144,9 @@ async function main() {
   const step = (msg) => console.log(`  • ${msg}`);
   const warn = (msg) => { warned.push(msg); console.log(`  ! ${msg}`); };
 
-  if (!PIN) {
+  if (!PASSWORD) {
     console.error('\n  This test drives the admin API to point the server at the simulated printer.');
-    console.error('  Run it with the PIN:  ADMIN_PIN=123456 node scripts/smoke-ipp.cjs\n');
+    console.error('  Run it with the console sign-in:  ADMIN_PASSWORD=… node scripts/smoke-ipp.cjs\n');
     process.exit(1);
   }
 
@@ -153,7 +154,7 @@ async function main() {
   step(`server: ${meta.appName} v${meta.version} (${BASE})`);
 
   const login = await fetch(`${BASE}${AS}/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: PIN }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: ADMIN_USER, password: PASSWORD }),
   });
   assert.strictEqual(login.status, 200, `admin sign-in failed (${login.status})`);
   cookie = (login.headers.get('set-cookie') || '').match(/pb_admin=[^;]+/)[0];

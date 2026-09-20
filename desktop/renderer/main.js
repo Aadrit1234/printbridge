@@ -1,8 +1,8 @@
 /* Admin app controller — the door, the routes, and the live status.
  *
  * Nothing renders until the session check says we are signed in; every API call
- * carries the session cookie, and a 401 anywhere drops the UI back to the PIN
- * screen instead of showing half-loaded controls. */
+ * carries the session cookie, and a 401 anywhere drops the UI back to the
+ * sign-in screen instead of showing half-loaded controls. */
 
 import { api, setUnauthorizedHandler, desktop } from './api.js';
 import { bootstrap, store, connectEvents, disconnectEvents } from './store.js';
@@ -20,28 +20,112 @@ import * as printerView from './views/printer.js';
 import * as settingsView from './views/settings.js';
 import * as accessView from './views/access.js';
 import * as accountView from './views/account.js';
+import * as connectionView from './views/connection.js';
+import * as pricingView from './views/pricing.js';
+import * as expensesView from './views/expenses.js';
+import * as reportsView from './views/reports.js';
 
 const viewHost = document.getElementById('view');
-const routes = [
+
+/* Every panel this console can show. Which ones it *does* show is the app's
+ * profile (desktop/shared/profile.js): the machine's app has Setup and no
+ * pricing; the shop's app has pricing, expenses and revenue and points at a
+ * machine; each hides what it does not have rather than showing it disabled. */
+const ROUTES = [
+  { match: /^#\/connection\/?$/, view: connectionView, name: 'connection', title: 'Machines' },
   { match: /^#\/setup\/?$/, view: setupView, name: 'setup', title: 'Setup' },
   { match: /^#\/queue\/?$/, view: queueView, name: 'queue', title: 'Queue' },
   { match: /^#\/codes\/?$/, view: codesView, name: 'codes', title: 'Print codes' },
   { match: /^#\/printers\/?$/, view: printersView, name: 'printers', title: 'Printers' },
   { match: /^#\/printer\/?$/, view: printerView, name: 'printer', title: 'Printer' },
+  { match: /^#\/pricing\/?$/, view: pricingView, name: 'pricing', title: 'Pricing' },
+  { match: /^#\/expenses\/?$/, view: expensesView, name: 'expenses', title: 'Expenses' },
+  { match: /^#\/reports\/?$/, view: reportsView, name: 'reports', title: 'Revenue & reports' },
   { match: /^#\/settings\/?$/, view: settingsView, name: 'settings', title: 'Settings' },
   { match: /^#\/access\/?$/, view: accessView, name: 'access', title: 'Access' },
   { match: /^#\/account\/?$/, view: accountView, name: 'account', title: 'Account' },
 ];
 
-/* Where the app opens. Setup first on a fresh install — it is the page that
- * tells you what is missing — then wherever you were last. */
+/* What this app is, from the main process. Set before anything renders. */
+let shell = { panels: null, home: '#/setup', productName: 'PrintBridge', supervises: true, machine: null };
+let routes = ROUTES;
+
+/* Sidebar entries for panels that have no markup of their own yet. The panels
+ * that came from the old web console keep their icons in index.html; the four
+ * the shop's app adds are drawn here. */
+const NAV_EXTRA = {
+  connection: {
+    label: 'Machines',
+    svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="10" rx="2"/><path d="M8 19h8"/><path d="M12 15v4"/></svg>',
+  },
+  pricing: {
+    label: 'Pricing',
+    svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 12 22l-9-9V4h9l8.6 8.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>',
+  },
+  expenses: {
+    label: 'Expenses',
+    svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2Z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>',
+  },
+  reports: {
+    label: 'Revenue',
+    svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16V9"/><path d="M13 16v-4"/><path d="M18 16V7"/></svg>',
+  },
+};
+
+/** Take on what this app is: its panels, where it opens, what it calls itself. */
+function applyProfile(info) {
+  if (!info || !info.profile) return;
+  shell = { ...shell, ...info.profile, machine: info.machine || null };
+  const wanted = new Set(shell.panels || []);
+  routes = ROUTES.filter(route => wanted.has(route.name));
+  if (!routes.length) routes = ROUTES.filter(route => route.name === 'queue');
+
+  const brand = document.getElementById('brand-name');
+  const sub = document.getElementById('brand-sub');
+  if (brand) brand.textContent = shell.productName.replace(/^PrintBridge\s+/, '');
+  if (sub) sub.textContent = shell.tagline || shell.productName;
+
+  const appLine = document.getElementById('sidebar-app');
+  if (appLine) {
+    appLine.textContent = shell.machine
+      ? `${shell.machine.name} · ${shell.machine.id}`
+      : (shell.picksMachine ? 'no machine chosen' : shell.productName);
+  }
+
+  buildNav(wanted);
+}
+
+/** Show only the panels this app has; add the ones index.html has no markup for. */
+function buildNav(wanted) {
+  const nav = document.getElementById('sidebar-nav');
+  const bottom = document.getElementById('bottomnav');
+  const present = new Set();
+  for (const link of document.querySelectorAll('[data-route]')) {
+    present.add(link.dataset.route);
+    if (!wanted.has(link.dataset.route)) link.remove();
+  }
+  for (const name of wanted) {
+    const meta = NAV_EXTRA[name];
+    if (!meta || present.has(name)) continue;
+    const item = `<a class="nav-item" href="#/${name}" data-route="${name}">${meta.svg}<span>${meta.label}</span></a>`;
+    if (nav) {
+      /* Choosing a machine is the first thing the shop's app does, so it goes
+       * at the top; everything else follows on from what is already there. */
+      if (name === 'connection') nav.insertAdjacentHTML('afterbegin', item);
+      else nav.insertAdjacentHTML('beforeend', item);
+    }
+    if (bottom) bottom.insertAdjacentHTML('beforeend', `<a href="#/${name}" data-route="${name}">${meta.svg}<span>${meta.label}</span></a>`);
+  }
+}
+
+/* Where the app opens: wherever you were last, if that panel exists here, then
+ * the profile's own first panel — Setup on a fresh install, Machines for a shop. */
 function startRoute() {
   try {
     const saved = localStorage.getItem('pb.desktop.route');
     if (saved && routes.some(r => `#/${r.name}` === saved)) return saved;
   } catch { /* private mode */ }
-  const ready = store.state.ready;
-  return ready ? '#/setup' : '#/setup';
+  return shell.home || '#/setup';
 }
 
 let current = null;
@@ -72,35 +156,43 @@ function loginShell(message) {
   <div class="login-wrap">
     <div class="card login-card">
       <div class="login-mark">${icons.shield}</div>
-      <h1>This machine is locked</h1>
-      <p>The console runs here, in the app, and nowhere else on the network. Enter the machine PIN to manage the printer, the queue and everyone's jobs.</p>
-      <form id="login-form" autocomplete="off">
-        <div class="pin-field">
-          <input class="input pin-input" id="login-pin" type="password" inputmode="numeric"
-                 placeholder="••••••" autocomplete="current-password" aria-label="Admin PIN" required>
+      <h1>Sign in</h1>
+      <p>The console runs here, in the app, and nowhere else on the network. Sign in with this machine's
+      username and password — or with the email and password of the owner account that holds the licence.</p>
+      <form id="login-form" autocomplete="on">
+        <div class="field">
+          <label class="opt-label" for="login-user">Username</label>
+          <input class="input" id="login-user" name="username" type="text"
+                 autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"
+                 placeholder="admin" required>
         </div>
-        <button class="btn primary" id="login-submit" type="submit" style="width:100%">Unlock</button>
+        <div class="field" style="margin-top:10px">
+          <label class="opt-label" for="login-pass">Password</label>
+          <input class="input" id="login-pass" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn primary" id="login-submit" type="submit" style="width:100%;margin-top:14px">Sign in</button>
       </form>
       <div id="login-error" class="job-error ${message ? '' : 'hidden'}" style="margin-top:12px">${esc(message)}</div>
       <div class="login-foot">
-        <div class="login-hint">The PIN is printed in the server console on first run.<br>Lost it? Delete <code>data/access.json</code> and restart.</div>
+        <div class="login-hint">The sign-in is printed in the server console on first run.<br>Lost it? Delete <code>data/access.json</code> and restart.</div>
         <a class="btn sm ghost" href="/print/">${icons.printer}<span>Print page</span></a>
       </div>
     </div>
   </div>`;
 }
 
-function startLockCountdown(input, button, secondsLeft) {
+function startLockCountdown(inputs, button, secondsLeft) {
+  const list = Array.isArray(inputs) ? inputs : [inputs];
   let left = Number(secondsLeft) || 0;
   const tick = () => {
     if (left <= 0) {
-      input.disabled = false;
+      for (const input of list) input.disabled = false;
       button.disabled = false;
-      button.textContent = 'Unlock';
-      input.focus();
+      button.textContent = 'Sign in';
+      (list[0] || {}).focus?.();
       return;
     }
-    input.disabled = true;
+    for (const input of list) input.disabled = true;
     button.disabled = true;
     button.textContent = `Wait ${left}s`;
     left -= 1;
@@ -118,35 +210,40 @@ export function showLogin({ message = '' } = {}) {
   layer.innerHTML = loginShell(message);
 
   const form = layer.querySelector('#login-form');
-  const input = layer.querySelector('#login-pin');
+  const user = layer.querySelector('#login-user');
+  const pass = layer.querySelector('#login-pass');
   const button = layer.querySelector('#login-submit');
   const error = layer.querySelector('#login-error');
-  input.focus();
+  user.focus();
 
-  // Kiosk keyboards and password managers do not always submit a form by
+  // A browser's autofill and a kiosk keyboard do not always submit a form by
   // themselves; make Enter explicit.
-  input.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') { event.preventDefault(); form.requestSubmit(); }
-  });
+  for (const field of [user, pass]) {
+    field.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); form.requestSubmit(); }
+    });
+  }
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const pin = input.value.trim();
-    if (!pin) return;
+    const username = user.value.trim();
+    const password = pass.value;
+    if (!username || !password) return;
     button.disabled = true;
     button.textContent = 'Checking…';
     try {
-      await api.login(pin);
-      // Kept in memory by the app so the end-to-end suites can sign in too.
-      desktop.rememberPin(pin).catch(() => {});
+      await api.login(username, password);
+      /* Held in memory by the app so the end-to-end suites can sign in too —
+       * they send it as the password, with no username. */
+      desktop.rememberPassword(password).catch(() => {});
       await enterApp();
     } catch (err) {
       error.textContent = err.message || 'Sign-in failed';
       error.classList.remove('hidden');
-      input.value = '';
+      pass.value = '';
       const retryAfter = err.payload && err.payload.retryAfter;
-      if (retryAfter) startLockCountdown(input, button, retryAfter);
-      else { input.focus(); button.disabled = false; button.textContent = 'Unlock'; }
+      if (retryAfter) startLockCountdown([user, pass], button, retryAfter);
+      else { pass.focus(); button.disabled = false; button.textContent = 'Sign in'; }
     }
   });
 }
@@ -296,6 +393,10 @@ async function wireStatusBar() {
     return;
   }
 
+  /* Restarting a service is only a thing you can do where it runs. The shop's
+   * app reads somebody else's machine; it must not offer to restart it. */
+  if (info && info.profile && !info.profile.supervises && restart) restart.hidden = true;
+
   restart?.addEventListener('click', async () => {
     restart.disabled = true;
     restart.textContent = 'Restarting…';
@@ -340,8 +441,16 @@ async function wireStatusBar() {
   }
 
   // The service's own state, straight from the app, not the browser's idea of it.
-  if (service) service.textContent = `service · port ${info ? info.port : '?'}${info && info.startedByUs ? '' : ' (external)'}`;
-  service.dataset.state = 'ok';
+  if (service) {
+    if (shell.supervises) {
+      service.textContent = `service · port ${info ? info.port : '?'}${info && info.startedByUs ? '' : ' (external)'}`;
+      service.dataset.state = 'ok';
+    } else {
+      /* No service of our own to report: say which machine we are reading. */
+      service.textContent = shell.machine ? `machine · ${shell.machine.name}` : 'machine · none chosen';
+      service.dataset.state = shell.machine ? 'ok' : 'warn';
+    }
+  }
 }
 
 function paintBadges() {
@@ -388,10 +497,10 @@ document.getElementById('btn-theme')?.addEventListener('click', handleThemeToggl
 document.getElementById('btn-logout')?.addEventListener('click', () => signOut('Signed out.'));
 document.getElementById('btn-logout-mobile')?.addEventListener('click', () => signOut('Signed out.'));
 
-// A dead session anywhere (expired cookie, PIN changed on another device)
+// A dead session anywhere (expired cookie, sign-in changed on another device)
 // re-arms the door instead of leaving stale controls on screen.
 setUnauthorizedHandler(() => {
-  if (signedIn) showLogin({ message: 'Your admin session ended — sign in again.' });
+  if (signedIn) showLogin({ message: 'Your session ended — sign in again.' });
 });
 
 window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
@@ -401,6 +510,11 @@ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ()
 /* ---------------- boot ---------------- */
 
 applyTheme(currentTheme());
+
+/* What this app is, before anything is drawn: the panels change with the
+ * profile, and a panel that flashes up and then disappears is worse than a
+ * blank half-second. */
+applyProfile(await desktop.getInfo().catch(() => null));
 wireStatusBar();
 
 // Panels ▸ … in the menu bar and the tray icons land here.

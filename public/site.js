@@ -102,16 +102,20 @@
      Shop pricing: yearly ⇄ lifetime
      ---------------------------------------------------------- */
   var billOpts = document.querySelectorAll(".bill-opt");
+  var shopPeriod = "year";
   if (billOpts.length) {
     var SHOP_PLANS = {
-      year: { price: "\u20B9499", term: "per year" },
-      life: { price: "\u20B95,999", term: "one-time \u00B7 lifetime" }
+      year: { price: "\u20B9499", term: "per year", buy: "Buy for my shop \u00B7 \u20B9499 a year", plan: "shop-yearly" },
+      life: { price: "\u20B911,999", term: "one-time \u00B7 lifetime", buy: "Buy for my shop \u00B7 \u20B911,999 once", plan: "shop-lifetime" }
     };
     var shopPrice = document.getElementById("shop-price");
     var shopTerm = document.getElementById("shop-term");
+    var buyPrice = document.querySelector("[data-buy-price]");
     billOpts.forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var plan = SHOP_PLANS[btn.getAttribute("data-period")] || SHOP_PLANS.year;
+        var period = btn.getAttribute("data-period") || "year";
+        var plan = SHOP_PLANS[period] || SHOP_PLANS.year;
+        shopPeriod = period;
         billOpts.forEach(function (other) {
           var on = other === btn;
           other.classList.toggle("is-on", on);
@@ -119,7 +123,254 @@
         });
         if (shopPrice) shopPrice.textContent = plan.price;
         if (shopTerm) shopTerm.textContent = plan.term;
+        if (buyPrice) buyPrice.textContent = period === "life" ? "\u20B911,999 once" : "\u20B9499 a year";
       });
+    });
+  }
+
+  /* ----------------------------------------------------------
+     Checkout
+     ----------------------------------------------------------
+     Buy buttons open a dialog, the details are posted to the machine that
+     takes the money, and the buyer is shown where to send it. Nothing is
+     charged by this page and no card details are collected here: the order is
+     recorded, the payment is made by UPI or transfer, and the access code goes
+     out once the money lands.
+
+     Prices and features are read from /api/owner/plans when the backend
+     answers, so the site can never advertise a price the checkout disagrees
+     with; the table below is the offline copy for exactly that moment when the
+     machine is switched off. */
+  var CHECKOUT = {
+    "workspace-lifetime": { label: "Workspace", term: "lifetime", amount: "\u20B96,999", termText: "one-time \u00B7 lifetime", app: "PrintBridge Workspace", category: "workspace" },
+    "shop-yearly": { label: "Shop", term: "yearly", amount: "\u20B9499", termText: "per year", app: "PrintBridge Shop", category: "shop" },
+    "shop-lifetime": { label: "Shop", term: "lifetime", amount: "\u20B911,999", termText: "one-time \u00B7 lifetime", app: "PrintBridge Shop", category: "shop" }
+  };
+
+  var dialog = document.getElementById("checkout");
+  var API = String(CFG.apiBase || "").replace(/\/+$/, "");
+
+  if (dialog && typeof dialog.showModal === "function") {
+    var plan = null;              // the plan id being bought
+    var remote = null;            // /plans, when the backend answered
+    var order = null;             // the order once it exists
+    var msg = document.getElementById("co-msg");
+    var pollTimer = null;
+
+    function planSpec(id) {
+      var local = CHECKOUT[id] || CHECKOUT["workspace-lifetime"];
+      var found = remote && remote.filter(function (p) { return p.id === id; })[0];
+      if (!found) return Object.assign({ id: id }, local);
+      return {
+        id: id,
+        label: found.label,
+        term: found.term,
+        amount: "\u20B9" + Number(found.amount).toLocaleString("en-IN"),
+        termText: found.term === "lifetime" ? "one-time \u00B7 lifetime" : "per year",
+        app: found.appLabel || local.app,
+        category: found.category,
+        features: found.features
+      };
+    }
+
+    function say(text, bad) {
+      if (!msg) return;
+      msg.hidden = !text;
+      msg.textContent = text || "";
+      msg.className = "co-note" + (bad ? " bad" : "");
+    }
+
+    function paintPlan(id) {
+      plan = id;
+      var spec = planSpec(id);
+      var features = spec.features || [];
+      document.getElementById("co-licence").textContent = spec.label + " \u00B7 " + spec.termText;
+      document.getElementById("co-title").textContent = "Buy " + spec.label;
+      document.getElementById("co-amount").textContent = spec.amount;
+      document.getElementById("co-term").textContent = spec.termText;
+      document.getElementById("co-app").textContent = "Arrives as " + spec.app + ".";
+      document.getElementById("co-features").innerHTML = features.slice(0, 6).map(function (f) {
+        return "<li>" + String(f).replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</li>";
+      }).join("");
+      document.getElementById("co-submit").textContent = "Place the order \u00B7 " + spec.amount;
+      say("");
+    }
+
+    function openFor(id) {
+      document.getElementById("co-form").hidden = false;
+      document.getElementById("co-ordered").hidden = true;
+      paintPlan(id);
+      if (!dialog.open) dialog.showModal();
+      /* Refresh the prices and features from the backend without blocking the
+       * dialog: if the machine is off, the table above already painted. */
+      fetch((API || "") + "/api/owner/plans", { headers: { Accept: "application/json" } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (data && data.plans) { remote = data.plans; if (plan) paintPlan(plan); }
+        })
+        .catch(function () { /* offline: the prices printed here stand */ });
+    }
+
+    var buyButtons = document.querySelectorAll("[data-buy]");
+    for (var b = 0; b < buyButtons.length; b++) {
+      buyButtons[b].addEventListener("click", function () {
+        var wanted = this.getAttribute("data-buy");
+        if (wanted === "shop") wanted = shopPeriod === "life" ? "shop-lifetime" : "shop-yearly";
+        openFor(wanted);
+      });
+    }
+
+    var closer = document.getElementById("co-close");
+    if (closer) closer.addEventListener("click", function () { dialog.close(); });
+    var done = document.getElementById("co-done");
+    if (done) done.addEventListener("click", function () { dialog.close(); });
+    dialog.addEventListener("click", function (e) { if (e.target === dialog) dialog.close(); });
+
+    function value(id) {
+      var el = document.getElementById(id);
+      return el && el.value ? el.value.trim() : "";
+    }
+
+    function method() {
+      var picked = document.querySelector('input[name="method"]:checked');
+      return picked ? picked.value : "upi";
+    }
+
+    /** Where to send the money, once an order exists. */
+    function paintPayment(payment, spec) {
+      var where = document.getElementById("co-pay-where");
+      var hint = document.getElementById("co-pay-hint");
+      var rows = [];
+      if (spec.method === "bank" && payment.bank) {
+        rows.push(["Bank", payment.bank]);
+      } else if (payment.upi) {
+        rows.push(["UPI id", payment.upi]);
+        rows.push(["Payee", payment.payee || "PrintBridge"]);
+      } else if (payment.bank) {
+        rows.push(["Bank", payment.bank]);
+      }
+      if (payment.note) rows.push(["Note", payment.note]);
+      if (!rows.length) {
+        where.innerHTML = "<p class=\"co-payhint\">Payment details are sent with your order confirmation — reply to it with the order number if you need them again.</p>";
+        if (hint) hint.hidden = true;
+        return;
+      }
+      where.innerHTML = rows.map(function (r) {
+        return '<div class="co-payrow"><span>' + r[0] + "</span><b>" + String(r[1]).replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</b></div>";
+      }).join("");
+      if (hint) hint.hidden = false;
+    }
+
+    function showOrder(res, spec) {
+      order = res.order;
+      var payment = res.payment || {};
+      document.getElementById("co-form").hidden = true;
+      document.getElementById("co-ordered").hidden = false;
+      document.getElementById("co-number").textContent = order.number;
+      document.getElementById("co-pay-amount").textContent = "\u20B9" + Number(order.amount).toLocaleString("en-IN");
+      document.getElementById("co-pay-for").textContent = order.planLabel + " \u00B7 " + (order.term === "lifetime" ? "lifetime" : "a year");
+      document.getElementById("co-pay-email").textContent = order.email;
+      paintPayment(Object.assign({ method: spec.method }, payment), spec);
+      say("");
+      startWatching();
+    }
+
+    /* Two minutes of polling, then leave it: the buyer does not sit staring at
+     * the tab, and nothing on this page is time-critical. */
+    function startWatching() {
+      if (pollTimer) clearInterval(pollTimer);
+      var tries = 0;
+      pollTimer = setInterval(function () {
+        tries += 1;
+        if (tries > 40) { clearInterval(pollTimer); pollTimer = null; return; }
+        checkOrder();
+      }, 3000);
+      checkOrder();
+    }
+
+    function checkOrder() {
+      if (!order) return;
+      fetch((API || "") + "/api/owner/orders/" + encodeURIComponent(order.id), { headers: { Accept: "application/json" } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data || !data.order) return;
+          if (data.order.status === "paid") {
+            var status = document.getElementById("co-status");
+            status.className = "co-note ok";
+            status.innerHTML = "Paid — your access code is <b>" + data.order.code + "</b>. " +
+              'Take it to <a href="/owner">Log in</a> to create your account, then download your app.';
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            var refresh = document.getElementById("co-refresh");
+            if (refresh) refresh.hidden = true;
+          }
+        })
+        .catch(function () { /* the machine may be off; the buyer can retry */ });
+    }
+
+    var refresh = document.getElementById("co-refresh");
+    if (refresh) refresh.addEventListener("click", function () {
+      say("Checking…");
+      checkOrder();
+    });
+
+    var form = document.getElementById("co-form");
+    if (form) form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var spec = planSpec(plan);
+      spec.method = method();
+      var payload = {
+        plan: plan,
+        name: value("co-name"),
+        email: value("co-email"),
+        phone: value("co-phone"),
+        method: spec.method,
+        note: value("co-note"),
+        source: "website",
+        address: {
+          line1: value("co-line1"),
+          line2: value("co-line2"),
+          city: value("co-city"),
+          state: value("co-state"),
+          pincode: value("co-pin"),
+          country: value("co-country") || "India"
+        }
+      };
+      if (!payload.name) return say("Enter the name the licence should be issued to.", true);
+      if (!payload.email) return say("Enter the email address your access code should go to.", true);
+      if (!payload.address.line1 || !payload.address.city || !payload.address.pincode) {
+        return say("The billing address needs a street, a city and a PIN code.", true);
+      }
+
+      var button = document.getElementById("co-submit");
+      button.disabled = true;
+      button.textContent = "Placing the order…";
+      say("");
+
+      fetch((API || "") + "/api/owner/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) {
+          return r.json().catch(function () { return null; }).then(function (data) {
+            return { ok: r.ok, status: r.status, data: data };
+          });
+        })
+        .then(function (res) {
+          button.disabled = false;
+          button.textContent = "Place the order \u00B7 " + spec.amount;
+          if (!res.ok || !res.data || !res.data.order) {
+            var why = (res.data && res.data.error) || "The order could not be recorded.";
+            if (res.status === 429) why = res.data.error;
+            return say(why, true);
+          }
+          showOrder(res.data, spec);
+        })
+        .catch(function () {
+          button.disabled = false;
+          button.textContent = "Place the order \u00B7 " + spec.amount;
+          say("Could not reach the printer's machine — orders are taken by the shop's own server. Try again in a moment, or write to the address in Contact.", true);
+        });
     });
   }
 

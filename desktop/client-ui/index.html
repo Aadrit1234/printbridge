@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>PrintBridge — printers near you</title>
+<link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
+<link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="/renderer/client.css">
+</head>
+<body class="client">
+
+<header class="client-head">
+  <div class="client-brand">
+    <div class="client-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 9V4h12v5"/><rect x="3" y="9" width="18" height="7" rx="2"/><path d="M7 16h10v4H7z"/>
+      </svg>
+    </div>
+    <div>
+      <strong>PrintBridge</strong>
+      <span id="client-sub">printers near you</span>
+    </div>
+  </div>
+  <div class="client-head-actions">
+    <button class="btn sm ghost" id="rescan" type="button">Look again</button>
+    <button class="btn sm ghost" id="theme" type="button" aria-label="Switch between light and dark">◐</button>
+  </div>
+</header>
+
+<main class="client-main">
+
+  <section class="card" id="found-card">
+    <div class="card-head">
+      <h2>Printers on this network</h2>
+      <span class="chip" id="scan-state">looking…</span>
+    </div>
+    <p class="muted small">A printer machine announces itself when it is running. Choose one and it opens that machine's print page — code, document, settings, done.</p>
+    <div id="found" class="client-list"><div class="empty">Looking for printer machines…</div></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Somewhere else</h2>
+    </div>
+    <p class="muted small">A machine on another network — a shop you use often, or one across a tailnet or VPN — still works if you know its address. It must be a PrintBridge machine that is running.</p>
+    <form class="row wrap client-form" id="by-hand" autocomplete="off">
+      <input class="input" id="address" type="text" placeholder="192.168.1.20:8088" aria-label="Machine address" required>
+      <button class="btn" id="check" type="submit">Check it</button>
+    </form>
+    <div class="job-error hidden" id="by-hand-error" style="margin-top:10px"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Remembered machines</h2>
+      <span class="chip" id="known-state">—</span>
+    </div>
+    <div id="known" class="client-list"><div class="empty">Nothing remembered yet.</div></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Printing with a code</h2>
+    </div>
+    <p class="muted small">Every machine also accepts a walk-up code from anywhere — the one printed on the sticker at the shop. If you have a code but the machine is not on this network, open it from the list above once, or ask the shop for its address.</p>
+    <div class="row wrap">
+      <button class="btn ghost" id="print-walkup" type="button">Print at a machine with a code</button>
+    </div>
+  </section>
+
+</main>
+
+<footer class="client-foot">
+  <span class="muted small" id="foot-state">ready</span>
+  <a class="muted small" href="/" id="open-web">The web page</a>
+</footer>
+
+<script type="module" src="/renderer/client.js"></script>
+</body>
+</html>

@@ -3,8 +3,8 @@
  * Two different identities meet in this app and it is worth being explicit about
  * them, because confusing them is the easiest way to lose a printer:
  *
- *   the machine PIN   one per install, signed in on this laptop, sees every
- *                     printer on the machine and every job
+ *   the machine       one username and password per install, signed in on this
+ *                     laptop, sees every printer on the machine and every job
  *   the owner account one per licence, created by redeeming the access code
  *                     that was emailed after purchase; sees only its own printers
  *
@@ -200,8 +200,9 @@ async function paintSignedIn(session) {
           <div><dt>Status</dt><dd>${esc(a.status || (session.active === false ? 'inactive' : 'active'))}</dd></div>
           <div><dt>Since</dt><dd>${esc((a.createdAt || '').slice(0, 10) || '—')}</dd></div>
         </dl>
-        <p class="small muted">The machine PIN still governs this console. The account is the licence and the
-        list of printers that belong to it.</p>
+        <p class="small muted">This machine's own username and password still govern the console. The account is
+        the licence and the list of printers that belong to it. Signing in with the account is how you see the licence
+        and add printers to it.</p>
       </section>
 
       <section class="card">

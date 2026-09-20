@@ -1,10 +1,10 @@
 /* REST client for the two admin-facing APIs.
  *
- *   /api/admin  the machine, behind the PIN — jobs, printers, the print path
+ *   /api/admin  the machine, behind its own sign-in — jobs, printers, the print path
  *   /api/owner  the licence, behind an owner account — plans, account, printers
  *
  * Every call carries the session cookie. A 401 on the machine API means the
- * session expired or was revoked, so the app drops straight back to the PIN
+ * session expired or was revoked, so the app drops straight back to the sign-in
  * screen.
  *
  * Both are same-origin: the desktop app's own host (desktop/host.js) serves
@@ -54,8 +54,8 @@ async function send(base, path, { method = 'GET', body, headers = {}, raw = fals
 
   if (res.status === 401) {
     const error = new ApiError((payload && payload.error) || 'Sign-in required', 401, payload);
-    // Only the machine API re-arms the PIN screen; losing a licence session must
-    // not lock you out of the printer.
+    // Only the machine API re-arms the sign-in screen; losing a licence session
+    // must not lock you out of the printer.
     if (base === BASE && path !== '/login') onUnauthorized(error);
     throw error;
   }
@@ -65,15 +65,34 @@ async function send(base, path, { method = 'GET', body, headers = {}, raw = fals
   return raw ? res : payload;
 }
 
+const SHOP_BASE = '/api/shop';
+
 function request(path, options) { return send(BASE, path, options); }
 function ownerRequest(path, options) { return send(OWNER_BASE, path, options); }
+function shopRequest(path, options) { return send(SHOP_BASE, path, options); }
+
+/**
+ * The business half — pricing's services, expenses, revenue.
+ *
+ * These need an owner account, not this machine's own sign-in: they are the licence
+ * holder's books, and a machine keeps books for nobody. The renderer keeps a
+ * local copy of the document and syncs it; the machine's copy is the meeting
+ * point, not the master (see desktop/renderer/shop.js).
+ */
+export const shopApi = {
+  document: () => shopRequest('/'),
+  sync: (document) => shopRequest('/sync', { method: 'POST', body: { document } }),
+  reports: ({ from = '', to = '' } = {}) => shopRequest(`/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  csvUrl: ({ from = '', to = '' } = {}) => `${SHOP_BASE}/reports.csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+};
 
 export const api = {
   /* ---------------- access ---------------- */
   session: () => request('/session'),
-  login: (pin) => request('/login', { method: 'POST', body: { pin } }),
+  /** This machine's own sign-in, or an owner account's email and password. */
+  login: (username, password) => request('/login', { method: 'POST', body: { username, password } }),
   logout: () => request('/logout', { method: 'POST', body: {} }),
-  changePin: (currentPin, nextPin) => request('/pin', { method: 'POST', body: { currentPin, nextPin } }),
+  setCredentials: ({ currentPassword, username, password }) => request('/credentials', { method: 'POST', body: { currentPassword, username, password } }),
   signOutOtherDevices: () => request('/sessions/revoke', { method: 'POST', body: {} }),
   closeAllSessions: () => request('/sessions/close-all', { method: 'POST', body: {} }),
   guestLink: () => request('/guest-link'),
@@ -161,7 +180,7 @@ export const api = {
 /* ---------------------------------------------------------------- owner API */
 
 /* The licence: a second identity on the same machine, and deliberately not the
- * same session as the PIN. An owner account sees only its own printers. */
+ * same session as the machine. An owner account sees only its own printers. */
 
 export const ownerApi = {
   plans: () => ownerRequest('/plans'),
@@ -195,7 +214,7 @@ export const desktop = {
   restartServer: () => (bridge ? bridge.restartServer() : desktopOnly('Restarting the service')),
   openDataFolder: () => (bridge ? bridge.openDataFolder() : desktopOnly('Opening the data folder')),
   openExternal: (url) => (bridge ? bridge.openExternal(url) : desktopOnly('Opening a browser')),
-  rememberPin: (pin) => (bridge ? bridge.rememberPin(pin) : Promise.resolve(false)),
+  rememberPassword: (password) => (bridge ? bridge.rememberPassword(password) : Promise.resolve(false)),
   runSelfTest: () => (bridge ? bridge.runSelfTest() : desktopOnly('The end-to-end suites')),
 
   autostart: {
@@ -206,6 +225,23 @@ export const desktop = {
   keepAwake: {
     get: () => (bridge ? bridge.keepAwake.get() : Promise.resolve({ enabled: false })),
     set: (enabled) => (bridge ? bridge.keepAwake.set(enabled) : desktopOnly('Staying awake')),
+  },
+
+  /* The machine this console is pointed at. Meaningful in the shop's app, where
+   * the machine is somewhere else on the network; the machine's own app never
+   * asks — it is the machine. */
+  machines: {
+    list: () => (bridge && bridge.machines ? bridge.machines.list() : Promise.resolve({ current: null, known: [] })),
+    discover: () => (bridge && bridge.machines ? bridge.machines.discover() : Promise.resolve({ current: null, found: [], known: [] })),
+    check: (address) => (bridge && bridge.machines ? bridge.machines.check(address) : desktopOnly('Checking a machine')),
+    use: (machine) => (bridge && bridge.machines ? bridge.machines.use(machine) : desktopOnly('Choosing a machine')),
+    forget: (id) => (bridge && bridge.machines ? bridge.machines.forget(id) : desktopOnly('Forgetting a machine')),
+  },
+
+  /* The shop's own document, kept on this computer (see renderer/shop.js). */
+  shop: {
+    load: (accountId) => (bridge && bridge.shop ? bridge.shop.load(accountId) : Promise.resolve({ document: null })),
+    save: (accountId, state) => (bridge && bridge.shop ? bridge.shop.save(accountId, state) : Promise.resolve({ ok: false, error: 'not in the desktop app' })),
   },
 
   notifications: {

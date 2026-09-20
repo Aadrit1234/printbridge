@@ -133,6 +133,21 @@
   ApiError.prototype = Object.create(Error.prototype);
   ApiError.prototype.constructor = ApiError;
 
+  /* The service runs on the machine the printer is plugged into — a shop's PC,
+   * an office's laptop. When that machine is off, nothing here can work, and
+   * saying so is the difference between "the shop is closed" and "this page is
+   * broken". The host is named when the site is hosted somewhere else, because
+   * then it is not the visitor's connection that is at fault. */
+  function offlineMessage() {
+    var host = '';
+    try {
+      host = new URL(CFG.apiBase).host;
+    } catch (err) { host = ''; }
+    return host
+      ? 'The printer machine (' + host + ') is not answering. Printing works while the machine in the shop is switched on.'
+      : 'The printer machine is not answering. Printing works while the machine in the shop is switched on.';
+  }
+
   function api(path, opts) {
     opts = opts || {};
     var headers = { 'X-Device-Id': deviceId() };
@@ -147,9 +162,14 @@
     try {
       res = fetch(BASE + path, options);
     } catch (err) {
-      return Promise.reject(new ApiError('Cannot reach the print server — check your connection.'));
+      return Promise.reject(new ApiError(offlineMessage(), 0));
     }
-    return res.then(function (r) {
+    /* A failed fetch *rejects*; it does not throw. Without this catch the
+     * visitor was shown the browser's own "Failed to fetch" — which tells them
+     * nothing about the thing that is actually wrong. */
+    return res.catch(function () {
+      throw new ApiError(offlineMessage(), 0);
+    }).then(function (r) {
       return r.json().catch(function () { return null; }).then(function (payload) {
         if (!r.ok) {
           var message = (payload && payload.error) || 'Request failed (' + r.status + ')';
@@ -546,9 +566,10 @@
         go(state.step);
       })
       .catch(function (err) {
+        var unreachable = !err || err.status === 0 || err.status >= 500;
         fail(err && err.status === 404
           ? 'No printer has that code. Check the sticker and try again.'
-          : (err.message || 'Could not reach the print server.'));
+          : (unreachable ? offlineMessage() : (err.message || 'Something went wrong.')));
       });
   }
 

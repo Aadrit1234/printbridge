@@ -8,7 +8,7 @@ is the whole of this document.
 | **Main site** | `/` | the public — company, product, features, pricing, contact | the print server, *and optionally* a static host (Vercel) |
 | **Print site** | `/print` | whoever is standing at the printer | the print server, *and optionally* the same static host |
 | **Owner site** | `/owner` | the licence holder: redeem a code, sign in | **only** the print server |
-| **The console** | the desktop app | the owner (PIN) | **only** the app, on `127.0.0.1` |
+| **The console** | the desktop app | the machine's sign-in, or an owner account | **only** the app, on `127.0.0.1` |
 | **API** | `/api/v1`, `/api/owner`, `/api/admin` | the sites and the app | only the print server |
 
 And **one server**, on the machine next to the printer. That is not a
@@ -31,7 +31,7 @@ can reach it. `npm run build:web` publishes the guest surfaces only.
 
 ```bash
 npm install
-npm start          # prints the QR code, the LAN address and the ADMIN PIN
+npm start          # prints the QR code, the LAN address and the console sign-in
 ```
 
 Guests on the same Wi-Fi use `http://<machine-ip>:8088/print`. Nothing else is
@@ -59,7 +59,8 @@ a real environment variable wins):
 PORT=8088
 DATA_DIR=C:\printbridge\data
 LOG_LEVEL=info
-ADMIN_PIN=              # optional: set it instead of the generated one on first run
+ADMIN_USER=admin        # console sign-in, part 1 (a username; "admin" unless changed)
+ADMIN_PASSWORD=         # console sign-in, part 2 (optional: set it instead of the generated one)
 ALLOWED_ORIGINS=        # only for the static deployment in §3
 ```
 
@@ -73,7 +74,7 @@ git commit -m "…"
 gh repo create printbridge --public --source=. --remote=origin --push
 ```
 
-`.gitignore` already excludes `data/` (jobs, uploads, the PIN hash), `node_modules/`,
+`.gitignore` already excludes `data/` (jobs, uploads, the sign-in hash), `node_modules/`,
 `dist*/`, `.env` and `server.log`. **Check what is staged before you push** —
 `git status --short` and `git diff --cached --stat` are enough.
 
@@ -139,7 +140,7 @@ curl -s http://localhost:8088/api/v1/printers/PP-XXXX-XXXX
 
 # 4. the flows, without a printer
 npm run check && npm run smoke && npm run smoke:ipp
-ADMIN_PIN=<pin> npm run smoke:walkup
+ADMIN_PASSWORD=<password> npm run smoke:walkup
 ```
 
 `smoke:walkup` is the one that matters after a change to the guest flow: it
@@ -182,6 +183,6 @@ consumer flow (code → upload → settings → token) with nothing in it about
 networks, tunnels or addresses.
 
 If you do publish it, remember what you are publishing: **anyone who has a
-printer code can send a job to that printer.** Keep the machine PIN on, keep codes
+printer code can send a job to that printer.** Keep the console sign-in on, keep codes
 off public pages, and prefer a VPN or an authenticating proxy over a port
 forward.

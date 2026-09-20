@@ -8,6 +8,7 @@ const express = require('express');
 const logger = require('./logger');
 const bus = require('./events');
 const cors = require('./cors');
+const auth = require('./auth');
 
 /* Settings are a shared resource: any device can change the print defaults, and
  * the watchdog can pick up a queue on its own. Fan those changes out over the
@@ -43,11 +44,14 @@ function createApp({ publicDir, lanUrl, lanAddresses = [] }) {
   //   /api/owner  the customer: redeem an access code, sign in, own account,
   //               and (with the vendor's operator key) mint the codes
   //   /api/admin  control room — every job, printer setup, defaults, storage.
-  //               The machine PIN sees the whole machine; an owner account sees
+  //               This machine's sign-in sees the whole machine; an owner account sees
   //               only its own printers (req.scope)
+  //   /api/shop   the business half: pricing services, expenses, revenue. Owner
+  //               account only — a machine keeps books for nobody.
   app.use('/api/v1', require('./routes/guest'));
   app.use('/api/owner', require('./routes/owner'));
   app.use('/api/admin', require('./routes/admin'));
+  app.use('/api/shop', auth.requireAdmin(), require('./routes/shop'));
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Unknown API endpoint' }));
 

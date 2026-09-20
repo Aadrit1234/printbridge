@@ -1,8 +1,8 @@
 /* Access view — who may control this machine.
  *
- * Everything a guest cannot do lives behind this PIN. This page changes the
- * PIN, manages the sessions that are signed in, and hands out the guest link
- * (with its QR card) without ever exposing the PIN itself. */
+ * Everything a guest cannot do lives behind this console's sign-in. This page
+ * sets that sign-in, manages the sessions that are signed in, and hands out the
+ * guest link (with its QR card) without ever exposing a password. */
 
 import { api } from '../api.js';
 import {
@@ -37,7 +37,8 @@ function shell() {
   <section class="view">
     <div class="view-head">
       <h1>Access</h1>
-      <p>Guests print freely; everything else needs this PIN. Share the guest link, keep the PIN to yourself.</p>
+      <p>Guests print freely; everything else needs the sign-in for this machine. Share the guest link,
+      keep the password to yourself.</p>
     </div>
 
     <div class="two-col">
@@ -83,7 +84,7 @@ function bind(container) {
           sessionDays: Number(days.value) || 30,
         });
         status = await api.session();
-        toast(settings.adminProtect ? 'PIN required for /admin' : 'Admin is open to the network',
+        toast(settings.adminProtect ? 'A sign-in is required for this console' : 'This console is open to the network',
           settings.adminProtect ? 'Guests still cannot reach it' : 'Anyone on this network can control the printer',
           settings.adminProtect ? 'ok' : 'info', 6000);
         paint(container);
@@ -94,10 +95,11 @@ function bind(container) {
       return;
     }
 
-    if (act === 'change-pin') {
-      const current = container.querySelector('#a-current').value.trim();
-      const next = container.querySelector('#a-next').value.trim();
-      const again = container.querySelector('#a-again').value.trim();
+    if (act === 'set-credentials') {
+      const username = container.querySelector('#a-user').value.trim();
+      const current = container.querySelector('#a-current').value;
+      const next = container.querySelector('#a-next').value;
+      const again = container.querySelector('#a-again').value;
       const error = container.querySelector('#a-error');
 
       const fail = (message) => {
@@ -106,15 +108,16 @@ function bind(container) {
       };
       error.classList.add('hidden');
 
-      if (!current) return fail('Enter your current PIN');
-      if (!/^[0-9a-zA-Z]{4,32}$/.test(next)) return fail('New PIN must be 4–32 letters or digits');
-      if (next !== again) return fail('The two new PINs do not match');
-      if (next === current) return fail('That is the same PIN you already have');
+      if (!username) return fail('Choose a username');
+      if (!current) return fail('Enter the password you signed in with');
+      if (next.length < 6) return fail('A password is at least 6 characters');
+      if (next !== again) return fail('The two new passwords do not match');
+      if (next === current) return fail('That is the password you already have');
 
       button.disabled = true;
       try {
-        const res = await api.changePin(current, next);
-        toast('PIN updated', res.note || 'Other devices were signed out');
+        const res = await api.setCredentials({ currentPassword: current, username, password: next });
+        toast('Sign-in updated', res.note || 'Other devices were signed out');
         container.querySelector('#a-current').value = '';
         container.querySelector('#a-next').value = '';
         container.querySelector('#a-again').value = '';
@@ -142,7 +145,7 @@ function bind(container) {
     if (act === 'close-all') {
       const ok = await confirmDialog({
         title: 'Sign out everywhere?',
-        message: 'Every device — including this one — will need the PIN again.',
+        message: 'Every device — including this one — will need to sign in again.',
         confirmLabel: 'Sign out all',
         danger: true,
       });
@@ -162,7 +165,7 @@ function bind(container) {
 function paint(container) {
   paintGate(container);
   paintShare(container);
-  paintPin(container);
+  paintCredentials(container);
   paintSessions(container);
 }
 
@@ -176,13 +179,13 @@ function paintGate(container) {
     <div class="gate-state ${on ? '' : 'open'}">
       ${on ? icons.shield : icons.alert}
       <div>
-        <div><b>${on ? 'PIN required' : 'Open to the network'}</b></div>
+        <div><b>${on ? 'Sign-in required' : 'Open to the network'}</b></div>
         <div class="muted small">${on
           ? 'Visitors can print, but only a signed-in owner can change anything.'
           : 'Anyone who can reach /admin can control the printer right now.'}</div>
       </div>
     </div>
-    <label class="opt-label" style="margin-top:14px">Require a PIN for /admin</label>
+    <label class="opt-label" style="margin-top:14px">Require a sign-in for this console</label>
     <label class="check-row">
       <input type="checkbox" id="a-protect" ${on ? 'checked' : ''}>
       <span>${on ? 'On' : 'Off — trusted network only'}</span>
@@ -209,33 +212,46 @@ function paintShare(container) {
         </div>
       </div>
     </div>
-    ${note('This link opens the guest page only. It can never reach the admin controls, and it carries no PIN.', 'info')}`;
+    ${note('This link opens the guest page only. It can never reach the console, and it carries no session.', 'info')}`;
 }
 
-function paintPin(container) {
+function paintCredentials(container) {
   const host = container.querySelector('#a-pin');
   if (!host || !status) return;
+  /* Why this card exists: the console is a desktop app now, and a desktop app
+   * that asks for six digits is a kiosk. This machine's sign-in is a username
+   * and a password, like everything else on the laptop it lives on. */
   host.innerHTML = `
-    <div class="card-head">${icon('shield')}<h2>Change the PIN</h2></div>
+    <div class="card-head">${icon('shield')}<h2>Sign-in for this machine</h2>
+      <span class="grow"></span>
+      ${status.needsSetup ? '<span class="chip warn">still the first-run one</span>' : ''}
+    </div>
     <div class="muted small" style="margin-bottom:12px">
-      ${status.updatedAt ? `Last changed ${esc(fmtAgo(status.updatedAt))}.` : ''}
-      Changing it signs every other device out.
+      ${status.username ? `Currently <b>${esc(status.username)}</b>. ` : ''}
+      ${status.updatedAt ? `Last changed ${esc(fmtAgo(status.updatedAt))}. ` : ''}
+      Changing it signs every other device out. An owner account — an email and password — can also open this
+      console, but only this machine's sign-in can change it.
     </div>
     <div class="stack" style="gap:12px;max-width:520px">
-      <label class="opt-block"><span class="opt-label">Current PIN</span>
-        <input class="input" id="a-current" type="password" inputmode="numeric" autocomplete="current-password" placeholder="••••••">
-      </label>
       <div class="two-col">
-        <label class="opt-block"><span class="opt-label">New PIN</span>
-          <input class="input" id="a-next" type="password" autocomplete="new-password" placeholder="4–32 letters or digits">
+        <label class="opt-block"><span class="opt-label">Username</span>
+          <input class="input" id="a-user" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" value="${esc(status.username || 'admin')}">
         </label>
-        <label class="opt-block"><span class="opt-label">Repeat new PIN</span>
+        <label class="opt-block"><span class="opt-label">Password you signed in with</span>
+          <input class="input" id="a-current" type="password" autocomplete="current-password">
+        </label>
+      </div>
+      <div class="two-col">
+        <label class="opt-block"><span class="opt-label">New password</span>
+          <input class="input" id="a-next" type="password" autocomplete="new-password" placeholder="at least 6 characters">
+        </label>
+        <label class="opt-block"><span class="opt-label">Repeat new password</span>
           <input class="input" id="a-again" type="password" autocomplete="new-password">
         </label>
       </div>
       <div id="a-error" class="job-error hidden"></div>
       <div class="row">
-        <button class="btn primary" data-act="change-pin">${icons.check}<span>Update PIN</span></button>
+        <button class="btn primary" data-act="set-credentials">${icons.check}<span>Update sign-in</span></button>
       </div>
     </div>`;
 }
@@ -259,5 +275,5 @@ function paintSessions(container) {
       <button class="btn sm" data-act="revoke-others">${icons.retry}<span>Sign out other devices</span></button>
       <button class="btn sm danger" data-act="close-all">${icons.x}<span>Sign out everywhere</span></button>
     </div>
-    ${note('Sessions survive a server restart, so a wall tablet stays signed in. Lost phone? Sign out everywhere and set a new PIN.', 'info')}`;
+    ${note('Sessions survive a server restart, so a wall tablet stays signed in. Lost phone? Sign out everywhere and set a new password.', 'info')}`;
 }

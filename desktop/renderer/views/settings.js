@@ -118,7 +118,7 @@ function shell() {
         <div class="tile"><div class="k small muted">Node</div><div class="v small">${esc(store.state.meta?.node || '')}</div></div>
         <div class="tile"><div class="k small muted">Uptime</div><div class="v" id="s-uptime">—</div></div>
       </div>
-      <div style="margin-top:14px">${note('This server prints for anyone who can reach it on your network. Keep the admin PIN on, and do not forward a router port to it — the guest page is meant for people on the same Wi-Fi as the printer.', 'warn')}</div>
+      <div style="margin-top:14px">${note('This server prints for anyone who can reach it on your network. Keep the console sign-in on, and do not forward a router port to it — the guest page is meant for people on the same Wi-Fi as the printer.', 'warn')}</div>
     </div>
   </section>`;
 }

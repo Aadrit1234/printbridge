@@ -1,0 +1,59 @@
+# PrintBridge Shop — the owner's app.
+#
+#   npm run desktop:build:shop
+#
+# It is a client: it runs no print service, so the server, its dependencies and
+# the test suites are not in this installer at all. What ships is the console,
+# the design system, the machines list and the update client — which is why this
+# build is a fraction of the machine app's size.
+#
+# All three apps share one repository and one version number on purpose: a shop
+# app one release behind the machine it manages is a support call.
+appId: app.printbridge.shop
+productName: PrintBridge Shop
+directories:
+  output: release
+extraMetadata:
+  main: desktop/apps/shop/main.js
+asar: false
+npmRebuild: false
+files:
+  - desktop/**/*
+  - public/**/*
+  - package.json
+  - '!**/*.map'
+  # No printer, no print service: none of this belongs in a laptop's app.
+  - '!server.js'
+  - '!src/**/*'
+  - '!scripts/**/*'
+  - '!data/**'
+  - '!dist/**'
+  - '!release/**'
+  - '!docs/**'
+  - '!.env'
+  - '!node_modules/sharp/**'
+  - '!node_modules/@napi-rs/**'
+  - '!node_modules/pdfjs-dist/**'
+  - '!node_modules/pdf-lib/**'
+  - '!node_modules/qrcode/**'
+  - '!node_modules/ipp/**'
+  - '!node_modules/express/**'
+  - '!node_modules/multer/**'
+  - '!**/{.git,.vercel,.github}/**'
+win:
+  icon: public/assets/icon-512.png
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: PrintBridge Shop
+  artifactName: PrintBridge-Shop-Setup-${version}.${ext}
+portable:
+  artifactName: PrintBridge-Shop-${version}-portable.${ext}

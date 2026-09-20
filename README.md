@@ -74,7 +74,7 @@ The console prints everything you need:
   Walk-up printer codes (enter these on the print site):
     PP-PTST-4SHP   Corner Print Shop (demo) · shop
     PP-PTST-4WKS   Workspace Copier (demo) · workspace
-  Admin PIN    482913    (first run — the app asks for it)
+  Sign-in      admin / 482913-correct-horse    (generated on first run — the app asks for it)
 ```
 
 Then: the app's **Printer** page to point PrintBridge at the printer, **Printers**
@@ -136,12 +136,15 @@ PrintBridge is multi-tenant: a customer is an **account**, and an account only
 ever comes into existence by **redeeming an access code**.
 
 ```
-  you (vendor)                the customer                 this server
-  ┌──────────────┐          ┌────────────────┐          ┌──────────────────┐
-  │ POST /codes  │─ email ─▶│  /owner        │─────────▶│ redeem once,     │
-  │ for a plan   │  AC-7K4Q │  code + email  │  HTTP    │ create account,  │
-  └──────────────┘  -2M9D   │  + password    │          │ issue session    │
-                            └────────────────┘          └──────────────────┘
+  the buyer                   this server                  the buyer
+  ┌──────────────┐          ┌──────────────────┐          ┌────────────────┐
+  │ the checkout │─────────▶│ order recorded,  │─ email ─▶│  /owner        │
+  │ on the site  │  HTTP    │ priced from PLANS│  WS-7K4Q │  code + email  │
+  └──────────────┘          │ paid → mint code │  -2M9D   │  + password    │
+        ▲                   └──────────────────┘          └────────────────┘
+        │ UPI / bank transfer        │                             │
+        └────────────────────────────┘                    the app it bought,
+          “mark it paid” from the order desk               from GitHub Releases
 ```
 
 There is deliberately **no sign-up that skips the code**. A code carries the
@@ -150,26 +153,71 @@ redeemed exactly once, and it can be bound to one address so a code mailed to
 somebody only works for them. A code handed to a different address, or reused,
 or expired, or revoked, is refused with a reason.
 
+Codes are prefixed by what they buy — **`WS-`** for a workspace, **`SH-`** for a
+shop — so the two kinds are never confused in an inbox. The prefix is cosmetic:
+a code is accepted with or without it, with or without dashes, in any case, and
+codes minted before the prefixes existed (`AC-`) still redeem.
+
 | Plan id | What it is | Price |
 |---|---|---|
-| `workspace-lifetime` | Workspace, one payment | ₹9,999 |
+| `workspace-lifetime` | Workspace, one payment | ₹6,999 |
 | `shop-yearly` | Shop, per year | ₹499 |
-| `shop-lifetime` | Shop, one payment | ₹5,999 |
+| `shop-lifetime` | Shop, one payment | ₹11,999 |
+
+### Buying: details → order → code → app
+
+1. **The checkout** (on the pricing page) takes the buyer's name, email, phone
+   and billing address, and the way they want to pay. `POST /api/owner/orders`.
+   The **price comes from `PLANS`, never from the request** — a browser cannot
+   name its own price — and the order gets a number (`PB-2026-0001`) that is the
+   handle for everything after.
+2. **Payment.** No card details are collected by this site, and none should be:
+   the order page shows where to send the money (`PAYMENT_UPI`, or bank
+   details). A payment gateway can call the same “paid” step later without
+   anything else changing.
+3. **The order desk** is where you mark it paid — and that one command mints the
+   code for *that* order's plan, binds it to the buyer's address and emails it:
+
+   ```bash
+   npm run orders                          # every order, with takings
+   npm run orders show PB-2026-0001        # one order in full
+   npm run orders paid PB-2026-0001 upi-ref-9931   # → mints + emails the code
+   npm run orders resend PB-2026-0001      # send the licence email again
+   npm run orders cancel PB-2026-0001 why  # never paid
+   npm run orders forget PB-2026-0001      # out of the ledger, code and all
+   ```
+
+   Or **the buyer's own page shows the code** the moment the order is paid — it
+   polls their order and prints it, so nobody waits on an inbox.
+4. **Mail.** With `MAIL_API_KEY` + `MAIL_FROM` (Resend) or `MAIL_WEBHOOK_URL`
+   (any relay) the licence email goes out for real. With neither, it is written
+   to `data/mail-outbox/<time>-<address>.txt` and the desk prints the path —
+   nothing is ever silently dropped, and a code is never only in an error
+   message.
+5. **Registering** is the code at `/owner` (see below). Once the account exists,
+   the page shows what the licence includes and **the app that licence bought** —
+   Workspace or Shop — built from the version in `package.json` and the GitHub
+   release it was published to. Publish the release and the links go live:
+
+   ```bash
+   gh release create v3.1.0 release/*.exe --title "PrintBridge 3.1.0"
+   ```
 
 Issuing a code is the **operator key's** job — yours as the vendor, not a
 customer's. It comes from `OPERATOR_KEY` in `.env` (16+ characters, no default
 and no first-run generation, because a guessable vendor key would be worse than
-none). With it unset the desk is closed and no code can be minted:
+none). With it unset the desk is closed and no code can be minted — not through
+an order either:
 
 ```bash
-# mint a shop licence bound to one address, valid for 30 days
+# mint a shop licence by hand, bound to one address, valid for 30 days
 curl -X POST http://localhost:8088/api/owner/codes \
   -H "x-operator-key: $OPERATOR_KEY" -H 'Content-Type: application/json' \
   -d '{"plan":"shop-lifetime","email":"buyer@example.com","days":30}'
-# → {"code":{"code":"AC-7K4Q-2M9D-X3TB", …}}
+# → {"code":{"code":"SH-7K4Q-2M9D-X3TB", …}}
 ```
 
-**What an account can see.** The machine's PIN opens the whole machine — every
+**What an account can see.** The machine's sign-in opens the whole machine — every
 printer, including the seeded demos. An account session opens *only its own*
 printers: another account's printer answers 404, not 403, because its existence
 is not that customer's business. A patch cannot reassign a printer out of the
@@ -201,14 +249,25 @@ from the owner’s per-page rates and the document’s real page count, and an u
 job is refused with a clear reason. Every page is charged, including the code
 page in front.
 
-## Access & the PIN
+## Access: the console sign-in
 
-- A random **6-digit PIN** is generated on first run and printed in the console
-  banner, stored as a **scrypt hash** in `data/access.json` — never in the
-  settings the UI can read, never sent to a browser.
-- **Change it** in Admin → Access. That signs every other device out.
-- **Pre-set it** with `ADMIN_PIN=…` when no `access.json` exists yet.
-- **Lost it?** Delete `data/access.json` and restart — a fresh PIN is printed.
+The console — which is the desktop app, and nothing on the network — opens with a
+**username and a password**, never a PIN.
+
+- Both are generated on first run and printed in the banner as
+  `Sign-in  admin / …`. The password is stored as a **scrypt hash** in
+  `data/access.json` — never in the settings the UI can read, never sent to a
+  browser.
+- **Change them** in the app under Access. That signs every other device out.
+- **Pre-set them** with `ADMIN_USER=…` and `ADMIN_PASSWORD=…` when no
+  `access.json` exists yet.
+- **Lost it?** Delete `data/access.json` and restart — a fresh username and
+  password are printed, and shown in the app's Setup panel.
+- **An owner account signs in here too**: the email and password behind a
+  licence. That is how the shop's laptop opens its console, and how a manager
+  gets a session without being told the machine's password.
+- **An install from before this keeps working**: the old PIN becomes the
+  password of the user `admin`, and the app asks for a real one.
 - **Sessions** last 30 days (`sessionDays`), survive restarts, and can all be
   revoked from Admin → Access.
 - **Brute force** is throttled: after 5 failures a lockout doubles from 30 s up
@@ -226,8 +285,17 @@ Environment variables (or a `.env`):
 | `HOST` | `0.0.0.0` | bind address |
 | `DATA_DIR` | `./data` | uploads, PDFs, previews, `jobs.json`, `printers.json`, `access.json` |
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
-| `ADMIN_PIN` | — | sets the PIN on first run (when `data/access.json` is absent) |
-| `OPERATOR_KEY` | — | the vendor's key for minting access codes (`POST /api/owner/codes`). 16+ characters. Unset = the code desk is closed |
+| `ADMIN_USER` | `admin` | the console's username (first run, when `data/access.json` is absent) |
+| `ADMIN_PASSWORD` | — | sets the console password on first run. `ADMIN_PIN` is the old name and still honoured |
+| `OPERATOR_KEY` | — | the vendor's key for minting access codes and working the order desk. 16+ characters. Unset = the code desk is closed |
+| `PUBLIC_URL` | the live site | where the licence email sends a buyer to redeem their code |
+| `PAYMENT_UPI` | — | the UPI id the checkout tells buyers to pay. Unset = the checkout asks them to get in touch instead |
+| `PAYMENT_PAYEE` | `PrintBridge` | the name shown beside that UPI id |
+| `PAYMENT_BANK` | — | "account name, number, IFSC" for buyers who would rather transfer |
+| `MAIL_FROM` + `MAIL_API_KEY` | — | send licence emails through Resend. Neither set = they are written to `data/mail-outbox/` instead |
+| `MAIL_WEBHOOK_URL` | — | or POST the message as JSON to any relay you run |
+| `RELEASES_REPO` | `Aadrit1234/printbridge` | the GitHub repository the installers are published to |
+| `RELEASES_BASE` | — | serve those files from your own mirror instead |
 | `ALLOWED_ORIGINS` | — | comma-separated origins allowed to call the API from another site. Unset means same-origin only. Once set, a cross-site request from any *other* origin is refused with 403 — not merely hidden from the browser |
 
 Everything else lives in Admin → Settings and is persisted to `data/config.json`
@@ -242,7 +310,8 @@ upload limit, preview page limit, keep-alive interval, retry window,
 | `npm run check` | syntax-check every source file (server, `src/`, scripts and the front-end) |
 | `npm run smoke` | end-to-end guest pipeline + auth + isolation |
 | `npm run smoke:walkup` | both guest flows (workspace and shop), codes, checkout, code page |
-| `npm run smoke:accounts` | access codes, account signup/login, per-account printer scoping |
+| `npm run smoke:accounts` | the whole sale: orders, prices, the licence email, codes, signup/login, per-account printer scoping, the download a licence gets |
+| `npm run orders` | the order desk: list, show, paid, resend, cancel, forget |
 | `npm run smoke:ipp` | Wi-Fi/IPP end-to-end against a simulated network printer |
 | `npm run fake-printer` | stand up that simulated printer on `127.0.0.1:8631` |
 | `npm run build:web` | build the static bundle for Vercel/Netlify (`PRINTBRIDGE_API_URL=…`) |
@@ -250,9 +319,9 @@ upload limit, preview page limit, keep-alive interval, retry window,
 
 ```bash
 npm run smoke                                   # guest surface only
-ADMIN_PIN=123456 npm run smoke                  # + admin API, sign-in, isolation
-ADMIN_PIN=123456 npm run smoke:walkup           # the walk-up flows (needs the PIN)
-OPERATOR_KEY=… ADMIN_PIN=123456 npm run smoke:accounts   # licences and accounts
+ADMIN_PASSWORD=… npm run smoke                  # + admin API, sign-in, isolation
+ADMIN_PASSWORD=… npm run smoke:walkup           # the walk-up flows (needs the sign-in)
+OPERATOR_KEY=… ADMIN_PASSWORD=… npm run smoke:accounts  # licences and accounts
 ```
 
 ## API
@@ -279,7 +348,7 @@ GET    /system/events?device=…     SSE: own jobs + printer
 **Admin — `/api/admin`** (session cookie from `POST /login`):
 
 ```
-POST /login  /logout  /pin  /sessions/revoke  /sessions/close-all
+POST /login  /logout  /credentials  /sessions/revoke  /sessions/close-all
 GET  /session
 /printers   the walk-up registry: list, create, get, patch, delete, lookup/:value
 /jobs       every job: list, print, cancel, retry, delete, clear finished
@@ -314,9 +383,9 @@ HTTPS first. Details, the GitHub push and the `ALLOWED_ORIGINS` rules:
 
 ## Troubleshooting
 
-- **The app asks for a PIN you do not have** → it is a hash in `data/access.json`
-  and cannot be read back. Delete that file and restart: a fresh PIN is printed
-  in the log, and shown in the app's Setup panel.
+- **The app asks for a username and password you do not have** → the password is
+  a hash in `data/access.json` and cannot be read back. Delete that file and
+  restart: a fresh pair is printed in the log, and shown in the app's Setup panel.
 - **A guest says “No printer has that code”** → the code belongs to a deleted or
   paused printer, or it was mistyped. Codes are `PP-` plus 8 characters.
 - **Job lands in the Outbox** → no usable print path; the app's Printer page
@@ -346,7 +415,7 @@ Printing is open to anyone who has a printer code **on purpose** — that is the
 feature. What matters is what a code cannot do: it cannot see other printers'
 jobs, other phones' codes, the printer's configuration, or anything in the admin
 console. Everything that changes the machine or shows other people's documents
-sits behind the admin PIN: a scrypt-hashed secret, HttpOnly SameSite=Strict
+sits behind the console sign-in: a scrypt-hashed password, HttpOnly SameSite=Strict
 cookies, per-IP throttling with backoff, and an API split that keeps the guest
 surface unable to reach any of it — verified by the smoke tests.
 

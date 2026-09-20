@@ -17,14 +17,14 @@ contextBridge.exposeInMainWorld('printbridgeDesktop', {
   /** Stop and start the print service this app owns, then wait for it. */
   restartServer: () => ipcRenderer.invoke('pb:server:restart'),
 
-  /** Show the folder holding jobs, printers and the hashed PIN. */
+  /** Show the folder holding jobs, printers and the hashed sign-in. */
   openDataFolder: () => ipcRenderer.invoke('pb:open-data'),
 
   /** Hand a URL to the real browser (never used for our own pages). */
   openExternal: (url) => ipcRenderer.invoke('pb:open-external', String(url)),
 
-  /** Remember the PIN for this session only, so the self-test can sign in. */
-  rememberPin: (pin) => ipcRenderer.invoke('pb:pin', String(pin || '')),
+  /** Remember the password for this session only, so the self-test can sign in. */
+  rememberPassword: (password) => ipcRenderer.invoke('pb:password', String(password || '')),
 
   /** Run the project's end-to-end suites against this service and report back. */
   runSelfTest: () => ipcRenderer.invoke('pb:selftest'),
@@ -75,5 +75,22 @@ contextBridge.exposeInMainWorld('printbridgeDesktop', {
   keepAwake: {
     get: () => ipcRenderer.invoke('pb:keepawake:get'),
     set: (enabled) => ipcRenderer.invoke('pb:keepawake:set', Boolean(enabled)),
+  },
+
+  /* ---------------- the shop's app: which machine, and its own books ------- */
+
+  machines: {
+    list: () => ipcRenderer.invoke('pb:machines:list'),
+    discover: () => ipcRenderer.invoke('pb:machines:discover'),
+    check: (address) => ipcRenderer.invoke('pb:machines:check', address),
+    use: (machine) => ipcRenderer.invoke('pb:machines:use', machine),
+    forget: (id) => ipcRenderer.invoke('pb:machines:forget', String(id || '')),
+  },
+
+  /* The local copy of the shop's document. Local first: the panel reads and
+   * writes this, and the sync to the machine happens when there is one. */
+  shop: {
+    load: (accountId) => ipcRenderer.invoke('pb:shop:load', String(accountId || '')),
+    save: (accountId, state) => ipcRenderer.invoke('pb:shop:save', String(accountId || ''), state || {}),
   },
 });

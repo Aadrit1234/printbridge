@@ -1,7 +1,7 @@
 'use strict';
 /* Cookie helpers.
  *
- * Three things now hold a session — the machine PIN, an owner account, and the
+ * Three things hold a session — the machine's own sign-in, an owner account, and the
  * operator key — and all three need the same two decisions made correctly:
  * whether the cookie must travel cross-site (a static host calling this
  * backend), and whether it may be Secure. Getting that wrong per-caller is how

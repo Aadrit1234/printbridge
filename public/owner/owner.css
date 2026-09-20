@@ -65,6 +65,28 @@
 .owner .line > span { color: var(--muted); }
 .owner .line b { font-weight: 600; }
 .owner .line b.mono { font-family: var(--font-mono); letter-spacing: 0.06em; }
+.owner .line .plan-app {
+  display: block; font-style: normal; font-size: 0.72rem; margin-top: 3px; color: var(--muted);
+}
+
+/* the licence's contents, and the app it buys */
+.owner .sub-head {
+  font-size: 0.74rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); margin: 20px 0 10px;
+}
+.owner .feature-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.owner .feature-list li { position: relative; padding-left: 20px; font-size: 0.9rem; line-height: 1.5; }
+.owner .feature-list li::before {
+  content: ""; position: absolute; left: 2px; top: 8px;
+  width: 7px; height: 7px; border-radius: 2px; background: var(--accent, #e0a44c);
+}
+.owner .download { margin-top: 6px; }
+.owner .download .btn { margin-top: 12px; }
+.owner #dl-also { margin-top: 10px; }
+.owner .download a { color: var(--accent, #c27f22); text-decoration: underline; text-underline-offset: 3px; }
+.owner #gp-buy, .owner #gate-buy { margin-top: 6px; }
+.owner #gate-buy a, .owner #su-code-hint + small a { color: var(--accent, #c27f22); }
+.owner #su-code-hint { font-size: 0.76rem; }
 
 .owner .note { margin-top: 16px; }
 .owner .note.bad { border-color: color-mix(in srgb, var(--failed) 45%, transparent); color: var(--failed); }

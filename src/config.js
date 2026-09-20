@@ -36,7 +36,7 @@ const DEFAULTS = {
   maxUploadMb: 25,
   maxPreviewPages: 40,
   theme: 'system',
-  adminProtect: true,    // /admin requires the PIN
+  adminProtect: true,    // the console API requires a sign-in (username + password)
   sessionDays: 30,       // how long an admin sign-in lasts
 };
 

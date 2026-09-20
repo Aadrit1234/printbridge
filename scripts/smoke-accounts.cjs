@@ -4,18 +4,23 @@
  * existence by redeeming an access code, and once it exists it sees its own
  * printers and nobody else's.
  *
- *   OPERATOR_KEY=… ADMIN_PIN=… node scripts/smoke-accounts.cjs
- *   BASE=http://192.168.1.20:8088 OPERATOR_KEY=… ADMIN_PIN=… node scripts/smoke-accounts.cjs
+ *   OPERATOR_KEY=… ADMIN_PASSWORD=… node scripts/smoke-accounts.cjs
+ *   BASE=http://192.168.1.20:8088 OPERATOR_KEY=… ADMIN_PASSWORD=… node scripts/smoke-accounts.cjs
  *
  * Checks, in order:
  *   • the operator desk refuses strangers and mints a plan-bearing code
  *   • the plans offered match the prices on the marketing site (INR)
+ *   • buying: details in, order recorded at the plan's price (not the one sent),
+ *     paid → a code for that plan is minted and the licence email is written or sent
+ *   • the buyer's own page sees the code once paid, and only once paid
+ *   • redeeming the order's code yields an account with that plan and the
+ *     right app to download
  *   • a code creates an account, and creating it signs the owner in
  *   • the same code cannot create a second account
  *   • a code bound to an email refuses a different address
  *   • the code is accepted however it is typed (no prefix, no dashes)
  *   • wrong credentials are refused, and a lockout follows repeated failures
- *   • an owner sees only their own printers; the machine PIN sees all of them
+ *   • an owner sees only their own printers; the machine's sign-in sees all of them
  *   • anonymous callers get nothing
  *
  * It creates its own printer and account and removes them again, so it is safe
@@ -23,12 +28,15 @@
  */
 'use strict';
 
+const fs = require('fs');
+
 const BASE = process.env.BASE || 'http://localhost:8088';
 const GS = '/api/v1';
 const OS = '/api/owner';
 const AS = '/api/admin';
 const OPERATOR_KEY = process.env.OPERATOR_KEY || '';
-const PIN = process.env.ADMIN_PIN || '';
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const PASSWORD = process.env.ADMIN_PASSWORD || process.env.ADMIN_PIN || '';
 
 let checks = 0;
 let failures = 0;
@@ -61,7 +69,10 @@ async function req(url, { method = 'GET', body, headers = {}, cookie = '', key =
 }
 
 /* Anything minted by this run is deleted before it exits. */
-const created = { account: null, otherAccount: null, thirdAccount: null, printerId: null, machinePrinterId: null, codeId: null, spareCodeId: null };
+const created = {
+  account: null, otherAccount: null, thirdAccount: null, orderAccount: null,
+  printerId: null, machinePrinterId: null, codeId: null, spareCodeId: null, order: null,
+};
 
 async function main() {
   console.log(`\n  accounts smoke: ${BASE}\n`);
@@ -77,12 +88,20 @@ async function main() {
   ok('the plans are the three INR licences',
     plans.status === 200 && byPlan['workspace-lifetime'] && byPlan['shop-yearly'] && byPlan['shop-lifetime'],
     plans.status);
-  ok('workspace lifetime is ₹9,999', byPlan['workspace-lifetime'] && byPlan['workspace-lifetime'].amount === 9999,
+  ok('workspace lifetime is ₹6,999', byPlan['workspace-lifetime'] && byPlan['workspace-lifetime'].amount === 6999,
     byPlan['workspace-lifetime'] && String(byPlan['workspace-lifetime'].amount));
   ok('shop is ₹499 a year', byPlan['shop-yearly'] && byPlan['shop-yearly'].amount === 499,
     byPlan['shop-yearly'] && String(byPlan['shop-yearly'].amount));
-  ok('shop lifetime is ₹5,999', byPlan['shop-lifetime'] && byPlan['shop-lifetime'].amount === 5999,
+  ok('shop lifetime is ₹11,999', byPlan['shop-lifetime'] && byPlan['shop-lifetime'].amount === 11999,
     byPlan['shop-lifetime'] && String(byPlan['shop-lifetime'].amount));
+  /* The features are what a buyer is told they get, so every plan has to carry
+   * them — an empty list on the site is a plan nobody can understand. */
+  ok('every plan lists what it includes',
+    Object.values(byPlan).every(p => Array.isArray(p.features) && p.features.length >= 4),
+    Object.values(byPlan).map(p => p.features && p.features.length).join('/'));
+  ok('a plan says which app it comes with',
+    byPlan['workspace-lifetime'].app === 'workspace' && byPlan['shop-lifetime'].app === 'shop',
+    `${byPlan['workspace-lifetime'].app} / ${byPlan['shop-lifetime'].app}`);
 
   /* ---------------- the operator desk ---------------- */
 
@@ -100,10 +119,109 @@ async function main() {
     minted.status === 201 ? `${code && code.plan} ${code && code.code}` : JSON.stringify(minted.payload));
   if (code) created.codeId = code.id;
 
+  ok('a shop code says SH at a glance', Boolean(code && /^SH-/.test(code.code)), code && code.code);
+
   const list = await req(`${OS}/codes`, { key: OPERATOR_KEY });
   const listed = (list.payload && list.payload.codes) || [];
   ok('a listing never leaks the code itself', listed.length > 0 && listed.every(c => c.code === undefined),
     `depth: ${listed.length}`);
+
+  /* ---------------- buying: the checkout, the order, the code ---------------- */
+
+  const orderEmail = `buyer+${stamp}@example.test`;
+  const badAddress = await req(`${OS}/orders`, {
+    method: 'POST',
+    body: { plan: 'shop-lifetime', name: 'No Address', email: orderEmail, address: { line1: 'x' } },
+  });
+  ok('an order without a billing address is refused', badAddress.status === 400,
+    `${badAddress.status} ${badAddress.payload && badAddress.payload.error}`);
+
+  const badEmail = await req(`${OS}/orders`, {
+    method: 'POST',
+    body: { plan: 'shop-lifetime', name: 'Bad Email', email: 'not-an-address', address: { line1: 'a', city: 'b', pincode: 'c' } },
+  });
+  ok('an order without a usable email is refused', badEmail.status === 400,
+    `${badEmail.status} ${badEmail.payload && badEmail.payload.error}`);
+
+  const placed = await req(`${OS}/orders`, {
+    method: 'POST',
+    body: {
+      plan: 'shop-lifetime',
+      name: 'Smoke Buyer',
+      email: orderEmail,
+      phone: '+91 98765 43210',
+      method: 'upi',
+      /* A browser trying to name its own price. The order must ignore it. */
+      amount: 1,
+      address: { line1: '12 Paper Lane', line2: 'Behind the market', city: 'Pune', state: 'MH', pincode: '411001' },
+    },
+  });
+  const order = placed.payload && placed.payload.order;
+  ok('the checkout records an order', placed.status === 201 && order && order.number,
+    `${placed.status} ${order && order.number}`);
+  ok('the order is priced from the plan, not from the request', order && order.amount === 11999,
+    order && String(order.amount));
+  ok('a fresh order is pending and carries no code', order && order.status === 'pending' && !order.code,
+    order && `${order.status} ${order.code}`);
+  if (order) created.order = order;
+
+  const wrongKeyPaid = await req(`${OS}/orders/${order.id}/paid`, { method: 'POST', key: 'not-the-key-but-long-enough' });
+  ok('strangers cannot mark an order paid', wrongKeyPaid.status === 401 || wrongKeyPaid.status === 503, `${wrongKeyPaid.status}`);
+
+  const watch = await req(`${OS}/orders/${order.id}`);
+  ok('the buyer can watch their own order by its id', watch.status === 200 && watch.payload.order.status === 'pending',
+    `${watch.status}`);
+
+  const paid = await req(`${OS}/orders/${order.id}/paid`, { method: 'POST', key: OPERATOR_KEY, body: { reference: `upi-${stamp}` } });
+  const paidCode = paid.payload && paid.payload.code;
+  ok('marking an order paid mints a code for its plan',
+    paid.status === 200 && paidCode && /^SH-/.test(paidCode),
+    `${paid.status} ${paidCode}`);
+  ok('the licence email went out, or is waiting in the outbox',
+    paid.status === 200 && (paid.payload.mailError === null) && Boolean(paid.payload.mail),
+    paid.payload && (paid.payload.mailError || (paid.payload.mail && paid.payload.mail.via)));
+  if (paid.payload && paid.payload.mail && paid.payload.mail.file) {
+    ok('the outbox copy is on disk where the order desk says it is',
+      fs.existsSync(paid.payload.mail.file), paid.payload.mail.file);
+  }
+
+  const afterPaid = await req(`${OS}/orders/${order.id}`);
+  ok('the buyer now sees their code — and only now',
+    afterPaid.payload.order.status === 'paid' && afterPaid.payload.order.code === paidCode,
+    `${afterPaid.payload.order.status} ${afterPaid.payload.order.code}`);
+
+  const twice = await req(`${OS}/orders/${order.id}/paid`, { method: 'POST', key: OPERATOR_KEY });
+  ok('paying twice refuses instead of issuing a second licence', twice.status === 409, `${twice.status}`);
+
+  const desk = await req(`${OS}/orders`, { key: OPERATOR_KEY });
+  ok('the order desk lists it and counts the money',
+    desk.status === 200 && (desk.payload.orders || []).some(o => o.number === order.number) && desk.payload.stats.takings >= 11999,
+    desk.status === 200 ? `takings ${desk.payload.stats.takings}` : String(desk.status));
+  ok('the desk never leaks a code unless it is asked for one',
+    (desk.payload.orders || []).every(o => o.code === undefined), 'listing');
+
+  /* The code the buyer was emailed has to do the whole job: create the account
+   * and hand them the right app to download. */
+  const orderSignup = await req(`${OS}/signup`, {
+    method: 'POST',
+    body: { code: paidCode, email: orderEmail, name: 'Smoke Buyer', password: 'a-long-enough-password' },
+  });
+  ok('the code from the order creates the buyer\'s account', orderSignup.status === 201,
+    `${orderSignup.status} ${orderSignup.payload && orderSignup.payload.error}`);
+  if (orderSignup.payload && orderSignup.payload.account) created.orderAccount = orderSignup.payload.account;
+
+  const orderAccount = await req(`${OS}/account`, { cookie: orderSignup.cookie });
+  const licence = orderAccount.payload && orderAccount.payload.licence;
+  const download = orderAccount.payload && orderAccount.payload.download;
+  ok('the account carries the licence that was bought',
+    orderAccount.status === 200 && licence && licence.id === 'shop-lifetime' && licence.features.length >= 4,
+    licence && `${licence.id} (${licence.features.length} features)`);
+  ok('a shop licence downloads the shop app',
+    download && download.primary && download.primary.id === 'shop' && /PrintBridge-Shop-Setup/.test(download.primary.url),
+    download && download.primary && download.primary.url);
+  ok('the download URL points at a published release for this version',
+    download && /releases\/download\/v[0-9]+\.[0-9]+\.[0-9]+\//.test(download.primary.url),
+    download && download.primary && download.primary.url);
 
   /* ---------------- redeeming ---------------- */
 
@@ -231,13 +349,38 @@ async function main() {
 
   /* ---------------- the machine still runs the machine ---------------- */
 
-  if (PIN) {
-    const machine = await req(`${AS}/login`, { method: 'POST', body: { pin: PIN } });
-    ok('the machine PIN still signs in', machine.status === 200, `${machine.status}`);
+  if (PASSWORD) {
+    /* The console signs in with a username and a password. `{ pin }` — a
+     * password with no username — is the older body and must keep working, or
+     * every script and an app a version behind loses access. */
+    const legacy = await req(`${AS}/login`, { method: 'POST', body: { pin: PASSWORD } });
+    ok('a password with no username still signs in (older clients)', legacy.status === 200, `${legacy.status}`);
+
+    const badUser = await req(`${AS}/login`, { method: 'POST', body: { username: 'no-such-user-here', password: PASSWORD } });
+    ok('the right password with the wrong username is refused', badUser.status === 401, `${badUser.status}`);
+
+    const noUser = await req(`${AS}/login`, { method: 'POST', body: { password: PASSWORD } });
+    ok('a password on its own is refused once a username is expected', noUser.status === 400, `${noUser.status} ${noUser.payload && noUser.payload.error}`);
+
+    const machine = await req(`${AS}/login`, {
+      method: 'POST',
+      body: { username: ADMIN_USER, password: PASSWORD },
+    });
+    ok('the machine signs in with its username and password',
+      machine.status === 200 && machine.payload && machine.payload.via === 'password',
+      `${machine.status} ${machine.payload && machine.payload.via}`);
+
+    /* An owner account opens the same console — that is how the shop's app
+     * signs in on a laptop that is not the printer's machine. */
+    const asOwner = await req(`${AS}/login`, { method: 'POST', body: { username: email, password: 'a-long-enough-password' } });
+    ok('an owner account opens the console as itself',
+      asOwner.status === 200 && asOwner.payload && asOwner.payload.via === 'account',
+      `${asOwner.status} ${asOwner.payload && asOwner.payload.via}`);
+
     if (machine.cookie) {
       const all = await req(`${AS}/printers`, { cookie: machine.cookie });
       const allIds = ((all.payload && all.payload.printers) || []).map(p => p.id);
-      ok('the machine PIN sees every printer, including the owner\'s', allIds.includes(created.printerId),
+      ok('the machine sign-in sees every printer, including the owner\'s', allIds.includes(created.printerId),
         `${allIds.length} printer(s)`);
 
       const madeByMachine = await req(`${AS}/printers`, {
@@ -258,7 +401,7 @@ async function main() {
       created.machineCookie = machine.cookie;
     }
   } else {
-    console.log('  (ADMIN_PIN not set — skipped the machine-scope checks)');
+    console.log('  (no console password given — skipped the machine-scope checks)');
   }
 
   /* ---------------- cleanup ---------------- */
@@ -270,7 +413,16 @@ async function main() {
 
   /* Accounts and unused codes this run left behind. The vendor can do this and
    * only the vendor — the operator key is the difference. */
-  const doomed = [created.account, created.otherAccount, created.thirdAccount].filter(Boolean);
+  /* The sale this run invented is taken out of the ledger entirely — a smoke
+   * test must not leave a paid order or a redeemed code behind on a live
+   * install. Deleting a paid order takes its code with it. */
+  if (created.order) {
+    const removed = await req(`${OS}/orders/${created.order.id}`, { method: 'DELETE', key: OPERATOR_KEY });
+    ok('a test sale can be taken out of the ledger', removed.status === 200 && removed.payload.codeRemoved === true,
+      `${removed.status} ${JSON.stringify(removed.payload)}`);
+  }
+
+  const doomed = [created.account, created.otherAccount, created.thirdAccount, created.orderAccount].filter(Boolean);
   const strangerCleanup = await req(`${OS}/accounts/${doomed[0] ? doomed[0].id : 'nobody'}`, {
     method: 'DELETE', cookie: accountCookie,
   });
@@ -280,7 +432,7 @@ async function main() {
     await req(`${OS}/accounts/${account.id}`, { method: 'DELETE', key: OPERATOR_KEY }).catch(() => {});
   }
   for (const id of [created.codeId, created.spareCodeId]) {
-    if (id) await req(`${OS}/codes/${id}/revoke`, { method: 'POST', key: OPERATOR_KEY }).catch(() => {});
+    if (id) await req(`${OS}/codes/${id}`, { method: 'DELETE', key: OPERATOR_KEY }).catch(() => {});
   }
   ok('cleaned up the printers and accounts this run created', true);
 

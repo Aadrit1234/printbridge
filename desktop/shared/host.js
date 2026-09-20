@@ -77,14 +77,14 @@ function serveFile(res, baseDir, relative) {
   });
 }
 
-function filterHeaders(headers, { serverPort }) {
+function filterHeaders(headers, target) {
   const out = {};
   for (const [key, value] of Object.entries(headers)) {
     if (HOP_BY_HOP.has(key.toLowerCase())) continue;
     if (key.toLowerCase() === 'host') continue;
     out[key] = value;
   }
-  out.host = `127.0.0.1:${serverPort}`;
+  out.host = `${target.host}:${target.port}`;
   return out;
 }
 
@@ -94,10 +94,14 @@ function filterHeaders(headers, { serverPort }) {
  * @param {object} opts
  * @param {string} opts.root       the renderer directory (index.html lives here)
  * @param {string} opts.publicDir  the project's public/ (shared CSS + modules)
- * @param {() => number} opts.serverPort  the print service's port, read live
+ * @param {() => ({host: string, port: number}|null)} opts.target
+ *        the machine to proxy to, read live: this machine's own service in the
+ *        machine's app, the chosen machine on the network in the shop's app.
+ *        Null (nothing chosen, or a service that is down) is an answer too —
+ *        the console loads anyway, which is when you most need to be told.
  * @param {(message: string) => void} [opts.log]
  */
-function start({ root, publicDir, serverPort, log = () => {} }) {
+function start({ root, publicDir, target, log = () => {} }) {
   const rootDir = path.resolve(root);
   const publicRoot = path.resolve(publicDir);
   let port = null;
@@ -132,19 +136,19 @@ function start({ root, publicDir, serverPort, log = () => {} }) {
       return serveFile(res, publicRoot, pathname.slice(1));
     }
 
-    // -------- everything else belongs to the print service --------
-    const target = serverPort();
-    if (!target) {
+    // -------- everything else belongs to a print service, somewhere --------
+    const machine = target();
+    if (!machine) {
       res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
-      return res.end(JSON.stringify({ error: 'The print service is not running' }));
+      return res.end(JSON.stringify({ error: 'No print service is reachable — the machine is not running, or no machine has been chosen' }));
     }
 
     const upstream = http.request({
-      host: '127.0.0.1',
-      port: target,
+      host: machine.host,
+      port: machine.port,
       path: req.url,
       method: req.method,
-      headers: filterHeaders(req.headers, { serverPort: target }),
+      headers: filterHeaders(req.headers, machine),
     }, (up) => {
       const headers = {};
       for (const [key, value] of Object.entries(up.headers)) {
@@ -158,7 +162,7 @@ function start({ root, publicDir, serverPort, log = () => {} }) {
     upstream.on('error', (error) => {
       if (res.headersSent) return res.end();
       res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: `The print service did not answer (${error.message})` }));
+      res.end(JSON.stringify({ error: `The print service at ${machine.host}:${machine.port} did not answer (${error.message})` }));
     });
 
     req.on('aborted', () => upstream.destroy());

@@ -174,8 +174,8 @@ async function paint() {
         title: 'The console is locked',
         state: session && session.protected ? 'done' : 'warn',
         detail: session && session.protected
-          ? 'Signed in with the machine PIN.'
-          : 'No PIN is set — anyone who reaches this machine could change everything.',
+          ? 'Signed in — this console has its own username and password.'
+          : 'This console is open: anyone who reaches this machine could change everything. Turn the sign-in on in Access.',
         action: `<button class="btn sm ghost" data-go="#/access">Access</button>`,
       })}
     </ol>

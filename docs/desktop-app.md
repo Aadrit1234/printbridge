@@ -79,7 +79,7 @@ The window is pointed at **the host**, never at the print service:
   the app.
 - **The guest page still works from inside the app,** because `/print/` and
   `/owner/` are proxied like everything else — and it opens in its own window, so
-  the PIN session never shares a page with a stranger's upload form.
+  the machine's session never shares a page with a stranger's upload form.
 - **The interface loads even when the service is down** (its own CSS and modules
   come from disk, not the proxy), which is exactly when you need to be told that.
 
@@ -87,7 +87,7 @@ The window is pointed at **the host**, never at the print service:
 
 | | Development (`npm run desktop`) | Packaged app |
 |---|---|---|
-| Jobs, printers, PIN, outbox | `<repo>/data` | `%APPDATA%/PrintBridge/data` |
+| Jobs, printers, sign-in, outbox | `<repo>/data` | `%APPDATA%/PrintBridge/data` |
 | Log | console | `%APPDATA%/PrintBridge/printbridge.log` |
 
 `DATA_DIR` in the environment overrides both — that is how you point the app at a
@@ -106,7 +106,7 @@ folder**, the machine strip's *Data folder* button, and the Setup panel.
 | **Starts with Windows** | *Tools ▸ Start when I sign in to Windows* or the Setup checkbox. No Task Scheduler, no PowerShell. |
 | **Stays awake** | Holds a power-save blocker so a sleeping laptop does not stall a job. |
 | **The log** | The service's stdout streams into the interface and into `printbridge.log`. Interface errors land in the same file, because a blank panel on a shop counter has to be diagnosable. |
-| **The real self-test** | Setup ▸ *Run the end-to-end suites*, or *Tools ▸ Run the real self-test*: it runs `scripts/smoke.cjs` and `scripts/smoke-walkup.cjs` against *this* service, on *this* printer, and prints what they found. The suites sign in with the PIN you entered, kept in memory for the session and never written to disk. |
+| **The real self-test** | Setup ▸ *Run the end-to-end suites*, or *Tools ▸ Run the real self-test*: it runs `scripts/smoke.cjs` and `scripts/smoke-walkup.cjs` against *this* service, on *this* printer, and prints what they found. The suites sign in with the username and password you entered, kept in memory for the session and never written to disk. |
 | **Menu, tray, shortcuts** | Every panel is on `Ctrl+1…8`, the tray has Setup/Queue/restart, and the guest page opens in its own window. |
 
 ## Updates
@@ -132,7 +132,7 @@ update small) to a GitHub release tagged with the version.
 | Printer not listed | Print one page from Notepad so Windows creates the queue, then *Find printers* on the Printer page. |
 | Nothing prints, job sits at *waiting* | Sleep, paper, or a changed IP address. The job retries on its own; *Wake printer* forces a check. |
 | "Silent print engine missing" | *Install the engine* on the Printer page: SumatraPDF via `winget`, or a portable download as a fallback. |
-| Lost the PIN | Quit the app, delete `access.json` in the data folder, start it again: a fresh PIN prints in the log. The hash cannot be recovered, only reset. |
+| Lost the sign-in | Quit the app, delete `access.json` in the data folder, start it again: a fresh username and password print in the log. The hash cannot be recovered, only reset. |
 | The interface is blank | The log holds the interface's own errors (`[ui:error] …`). Usually a stale build: `View ▸ Force reload`. |
 
 ## Tests
@@ -141,7 +141,7 @@ update small) to a GitHub release tagged with the version.
 npm run check            # syntax: node --check for the server, scripts and app shell
                          #         scripts/check-modules.cjs parses every ES module
 npm run smoke            # upload → preview → print, plus auth isolation
-npm run smoke:walkup     # the workspace and shop guest flows (needs ADMIN_PIN)
+npm run smoke:walkup     # the workspace and shop guest flows (needs ADMIN_PASSWORD)
 npm run smoke:accounts   # access codes → accounts → scoped printers
 ```
 

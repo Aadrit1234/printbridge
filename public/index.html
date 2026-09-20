@@ -9,7 +9,7 @@
 <link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
 <link rel="alternate icon" href="/assets/icon-192.png">
 <link rel="apple-touch-icon" href="/assets/icon-192.png">
-<link rel="stylesheet" href="/site.css?v=3.0.0">
+<link rel="stylesheet" href="/site.css?v=3.1.0">
 <script src="/config.js"></script>
 <script>
   /* Light or dark, decided before the first paint so nobody sees a flash of the
@@ -25,7 +25,7 @@
     } catch (e) { /* private mode — the default stands */ }
   })();
 </script>
-<script src="/site.js?v=3.0.0" defer></script>
+<script src="/site.js?v=3.1.0" defer></script>
 </head>
 <body>
 
@@ -378,21 +378,27 @@
         <p class="lead" data-reveal data-delay="120">One price per machine, in rupees — no per-seat fees and no cut of your pages. What your guests pay per sheet is yours to set in the console.</p>
       </div>
 
+      <p class="buy-line" data-reveal data-delay="160">Buying takes a minute: your details, then your access code by email. The code is what creates your account, and the app you bought downloads right after. <a href="#checkout-steps">How it works ↓</a></p>
+
       <div class="tiers">
         <article class="tier" data-reveal data-delay="0">
           <div class="tier-head">
             <span class="tier-tag">Workspace</span>
-            <p class="tier-price"><strong>₹9,999</strong><small>one-time · lifetime</small></p>
+            <p class="tier-price"><strong>₹6,999</strong><small>one-time · lifetime</small></p>
           </div>
           <p class="tier-desc">For an office, a floor or a shared desk: one queue, a code on the machine, and everyone prints to it from their own phone.</p>
           <ul class="tier-list">
-            <li>Lifetime licence — pay once, keep it</li>
-            <li>Unlimited printer codes and guests</li>
-            <li>Up to 10 documents in one print command</li>
-            <li>Tokens, history and reprints included</li>
+            <li>Lifetime licence for one machine — pay once, keep it</li>
+            <li>Guests print from their phone after scanning one code: no app, no account</li>
+            <li>Unlimited printer codes — rename, share or revoke any of them</li>
+            <li>The app sets the printer up itself: plug it in, it goes wireless and gets a code</li>
+            <li>Print codes, job history and reprints included</li>
+            <li>Up to 10 documents in one print command, 25 MB each</li>
           </ul>
+          <p class="tier-formline">Arrives as <strong>PrintBridge Workspace</strong>, the machine app for Windows — plus the customer app for the people who print.</p>
           <p class="tier-costline"><em>Lifetime</em> · updates for the life of the product</p>
-          <a class="btn btn-block" href="/print">Open the printer</a>
+          <button class="btn btn-block" type="button" data-buy="workspace-lifetime">Buy Workspace · ₹6,999</button>
+          <a class="tier-alt" href="/print">Or open a printer you already have →</a>
         </article>
 
         <article class="tier tier-featured" data-reveal data-delay="110">
@@ -405,17 +411,21 @@
 
           <div class="bill-switch" role="group" aria-label="Shop billing period">
             <button class="bill-opt is-on" type="button" data-period="year" aria-pressed="true">₹499 / year</button>
-            <button class="bill-opt" type="button" data-period="life" aria-pressed="false">₹5,999 lifetime</button>
+            <button class="bill-opt" type="button" data-period="life" aria-pressed="false">₹11,999 lifetime</button>
           </div>
 
           <ul class="tier-list">
-            <li>Everything in Workspace</li>
-            <li>Colour and black &amp; white priced per page</li>
-            <li>Guest checkout before anything prints</li>
-            <li>Per-job margins and takings, live</li>
+            <li>Everything in Workspace, plus the whole business half</li>
+            <li>Charge by the page, in colour and black &amp; white, at rates you set</li>
+            <li>Guests pay before a sheet moves — at the counter or on their phone</li>
+            <li>Today's takings, per-job margin and expenses in the owner's app</li>
+            <li>Shop console app with pricing manager, expenses and reports</li>
+            <li>Every printer you register sits under one licence</li>
           </ul>
-          <p class="tier-costline"><em>₹499</em> a year, or <em>₹5,999</em> once and it is yours</p>
-          <a class="btn btn-block" href="/owner">Sign in to your console</a>
+          <p class="tier-formline">Arrives as <strong>PrintBridge Shop</strong>, the owner's app — the machine itself runs the Workspace app, which the same licence covers.</p>
+          <p class="tier-costline"><em>₹499</em> a year, or <em>₹11,999</em> once and it is yours</p>
+          <button class="btn btn-block btn-print" type="button" data-buy="shop">Buy for my shop · <span data-buy-price>₹499 a year</span></button>
+          <a class="tier-alt" href="/owner">Already have a licence? Sign in →</a>
         </article>
 
         <article class="tier" data-reveal data-delay="220">
@@ -434,6 +444,30 @@
           <a class="btn btn-block" href="#contact">Talk to us</a>
         </article>
       </div>
+
+      <!-- how a purchase actually goes -->
+      <ol class="buy-steps" id="checkout-steps" data-reveal>
+        <li>
+          <span class="step-num">1</span>
+          <h3>Tell us who it is for</h3>
+          <p>Pick a licence and fill in the checkout: your name, your email, and the address to bill. No account to create first.</p>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <h3>Pay the way you already pay</h3>
+          <p>The order is recorded with its own number. Pay it by UPI or bank transfer; the site shows exactly where, and nothing is hidden behind a card form.</p>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <h3>Your access code arrives by email</h3>
+          <p>A fresh code, made for your order alone — a <b>WS-</b> code for a workspace, an <b>SH-</b> code for a shop. It is the only thing that can open an account.</p>
+        </li>
+        <li>
+          <span class="step-num">4</span>
+          <h3>Register, then download your app</h3>
+          <p>Paste the code at <a href="/owner">Log in</a> to create your account. The page then hands you the app your licence bought — Workspace or Shop — ready to install.</p>
+        </li>
+      </ol>
 
       <!-- what a shop job looks like on paper -->
       <figure class="ledger" data-reveal>
@@ -525,6 +559,106 @@
     <p class="footer-tag">Printed responsibly, one side at a time.</p>
   </div>
 </footer>
+
+<!-- ==================================================== CHECKOUT
+     A dialog, not a page: the licence being bought stays in view while the
+     details are filled in, and nothing here is needed until it is opened.
+     Everything posts to the server that will actually take the money; when
+     this site is hosted somewhere else, config.js points it there. -->
+<dialog class="checkout" id="checkout" aria-labelledby="co-title">
+  <form class="co-form" id="co-form" novalidate>
+    <header class="co-head">
+      <div>
+        <p class="co-kicker" id="co-licence">Workspace · lifetime</p>
+        <h2 class="co-title" id="co-title">Buy PrintBridge</h2>
+      </div>
+      <button class="co-close" type="button" id="co-close" aria-label="Close">×</button>
+    </header>
+
+    <div class="co-body">
+      <section class="co-summary" id="co-summary" aria-live="polite">
+        <p class="co-price"><strong id="co-amount">₹6,999</strong><span id="co-term">one-time · lifetime</span></p>
+        <ul class="co-features" id="co-features"></ul>
+        <p class="co-app" id="co-app">Arrives as PrintBridge Workspace.</p>
+      </section>
+
+      <section class="co-fields">
+        <p class="co-note" id="co-msg" hidden></p>
+
+        <fieldset class="co-set">
+          <legend>Who is the licence for?</legend>
+          <label class="co-field"><span>Full name *</span>
+            <input id="co-name" name="name" autocomplete="name" required>
+          </label>
+          <label class="co-field"><span>Email *</span>
+            <input id="co-email" name="email" type="email" autocomplete="email" required>
+            <small>Your access code is sent here — check it before you pay.</small>
+          </label>
+          <label class="co-field"><span>Phone (optional)</span>
+            <input id="co-phone" name="phone" type="tel" autocomplete="tel">
+          </label>
+        </fieldset>
+
+        <fieldset class="co-set">
+          <legend>Billing address</legend>
+          <label class="co-field"><span>Address *</span>
+            <input id="co-line1" name="address1" autocomplete="address-line1" required>
+          </label>
+          <label class="co-field"><span>Address line 2</span>
+            <input id="co-line2" name="address2" autocomplete="address-line2">
+          </label>
+          <div class="co-row">
+            <label class="co-field"><span>City *</span>
+              <input id="co-city" name="city" autocomplete="address-level2" required>
+            </label>
+            <label class="co-field"><span>State</span>
+              <input id="co-state" name="state" autocomplete="address-level1">
+            </label>
+            <label class="co-field"><span>PIN code *</span>
+              <input id="co-pin" name="pincode" autocomplete="postal-code" required>
+            </label>
+          </div>
+          <label class="co-field"><span>Country</span>
+            <input id="co-country" name="country" value="India" autocomplete="country-name">
+          </label>
+        </fieldset>
+
+        <fieldset class="co-set">
+          <legend>How would you like to pay?</legend>
+          <div class="co-methods" id="co-methods">
+            <label class="co-radio"><input type="radio" name="method" value="upi" checked> <span>UPI</span></label>
+            <label class="co-radio"><input type="radio" name="method" value="bank"> <span>Bank transfer</span></label>
+          </div>
+          <label class="co-field"><span>Anything we should know? (optional)</span>
+            <input id="co-note" name="note" maxlength="200" placeholder="GSTIN, a purchase-order number, a delivery note…">
+          </label>
+        </fieldset>
+
+        <button class="btn btn-block btn-print" id="co-submit" type="submit">Place the order</button>
+        <p class="co-fine">No card details are taken here, and nothing is charged by this page. The order is recorded and you are shown exactly where to send the money.</p>
+      </section>
+    </div>
+  </form>
+
+  <!-- shown once the order exists -->
+  <section class="co-paid" id="co-ordered" hidden>
+    <header class="co-head">
+      <div>
+        <p class="co-kicker">Order <b id="co-number">PB-—</b></p>
+        <h2 class="co-title">Pay, and your code is on its way</h2>
+      </div>
+      <button class="co-close" type="button" id="co-done" aria-label="Close">×</button>
+    </header>
+    <div class="co-paybox">
+      <p class="co-payamount"><strong id="co-pay-amount">₹6,999</strong> <span id="co-pay-for">Workspace · lifetime</span></p>
+      <div class="co-paywhere" id="co-pay-where"></div>
+      <p class="co-payhint" id="co-pay-hint">Put the order number in the payment note, so it can be matched the moment it lands.</p>
+    </div>
+    <p class="co-note" id="co-status" aria-live="polite">Waiting for the payment…</p>
+    <button class="btn btn-block" id="co-refresh" type="button">Check again</button>
+    <p class="co-fine">The access code is emailed to <b id="co-pay-email">you</b> as soon as the payment is confirmed, usually the same day. Keep this tab or the order number — <b>Check again</b> also shows the code here.</p>
+  </section>
+</dialog>
 
 </body>
 </html>

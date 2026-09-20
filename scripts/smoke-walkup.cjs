@@ -31,8 +31,13 @@ const { PDFDocument, StandardFonts } = require('pdf-lib');
 const BASE = process.env.BASE || 'http://localhost:8088';
 const GS = '/api/v1';
 const AS = '/api/admin';
-const PIN = process.env.ADMIN_PIN;
-const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..', 'data');
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const PASSWORD = process.env.ADMIN_PASSWORD || process.env.ADMIN_PIN;
+/* An explicit DATA_DIR wins; otherwise this is filled in from the server's own
+ * /api/admin/system/meta once we are signed in, so a scratch run against a
+ * throwaway server looks in the folder that server actually writes to. Guessing
+ * <repo>/data used to report a missing code page that was never missing. */
+let DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, '..', 'data');
 
 const DEVICE = 'dev_walkup_smoke';
 const OTHER_DEVICE = 'dev_walkup_other';
@@ -118,25 +123,31 @@ async function pageCountOf(file) {
 async function main() {
   console.log(`\n  walk-up smoke: ${BASE}\n`);
 
-  if (PIN) {
-    const login = await req(`${AS}/login`, { method: 'POST', body: { pin: PIN }, device: null });
+  if (PASSWORD) {
+    const login = await req(`${AS}/login`, { method: 'POST', body: { username: ADMIN_USER, password: PASSWORD }, device: null });
     assert.strictEqual(login.status, 200, `admin sign-in failed (${login.status})`);
     const raw = login.payload;
     void raw;
     // fetch() hides Set-Cookie, so re-request with an explicit header list
     const res = await fetch(BASE + AS + '/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: PIN }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: ADMIN_USER, password: PASSWORD }),
     });
     const set = res.headers.getSetCookie ? res.headers.getSetCookie() : [res.headers.get('set-cookie')];
     cookie = String(set.filter(Boolean)[0] || '').split(';')[0];
     ok('signed in to the admin API', Boolean(cookie));
+
+    if (!process.env.DATA_DIR && cookie) {
+      const meta = await req(`${AS}/system/meta`, { admin: true, device: null }).catch(() => null);
+      const reported = meta && meta.payload && meta.payload.dataDir;
+      if (reported) DATA_DIR = path.resolve(reported);
+    }
   }
 
   /* ---------------- fixtures: one printer per category ---------------- */
   const made = [];
 
   async function makePrinter(body) {
-    if (!cookie) throw new Error('ADMIN_PIN is required to create the test printers');
+    if (!cookie) throw new Error('the console sign-in is required to create the test printers — set ADMIN_PASSWORD (or ADMIN_PIN)');
     const res = await req(`${AS}/printers`, { method: 'POST', body, device: null, admin: true });
     assert.strictEqual(res.status, 201, `could not create printer: ${res.status} ${JSON.stringify(res.payload)}`);
     made.push(res.payload.printer.id);
@@ -189,7 +200,13 @@ async function main() {
       const pages = await pageCountOf(copy);
       ok('the code page is printed in front of the document', pages === 3, `${pages} pages = 1 code + 2 document`);
     } else {
-      ok('the code page is printed in front of the document', false, `no print copy at ${copy}`);
+      /* Not necessarily a failure: when DATA_DIR is not set, this suite looks in
+       * the repo's data/ while a throwaway server writes somewhere else. Say so,
+       * because "the file is not there" reads like a broken code page. */
+      ok('the code page is printed in front of the document', false,
+        process.env.DATA_DIR
+          ? `no print copy at ${copy} (the server writes to ${DATA_DIR} — is that the same directory?)`
+          : `no print copy at ${copy} — pass DATA_DIR=… if the server does not use <repo>/data`);
     }
 
     /* ---------------- shop: pay first ---------------- */

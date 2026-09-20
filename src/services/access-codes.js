@@ -30,12 +30,69 @@ const PREFIX = 'AC';
 const ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 
 /* The plans a code can carry. Kept here so a code can never invent a plan, and
- * so the amount an operator is owed is never guessed by the callers. */
+ * so the amount an operator is owed is never guessed by the callers — the
+ * website, the checkout and the mails all read their prices and features from
+ * this one place. */
 const PLANS = {
-  'workspace-lifetime': { label: 'Workspace', amount: 9999, currency: 'INR', term: 'lifetime', category: 'workspace' },
-  'shop-yearly': { label: 'Shop', amount: 499, currency: 'INR', term: 'yearly', category: 'shop' },
-  'shop-lifetime': { label: 'Shop', amount: 5999, currency: 'INR', term: 'lifetime', category: 'shop' },
+  'workspace-lifetime': {
+    label: 'Workspace',
+    amount: 6999,
+    currency: 'INR',
+    term: 'lifetime',
+    category: 'workspace',
+    blurb: 'An office, a floor or a shared desk: one queue, a code on the machine, and everyone prints to it from their own phone.',
+    features: [
+      'Lifetime licence for one machine — pay once, keep it, updates included',
+      'Guests print from their phone after scanning one code: no app, no account',
+      'Unlimited printer codes — rename, share or revoke any of them',
+      'The app sets the printer up itself: plug it in, it goes wireless and gets a code',
+      'Print codes, tokens, job history and reprints included',
+      'Up to 10 documents in one print command, 25 MB each',
+      'Workspace console app for Windows, and the same console in a browser tab',
+    ],
+  },
+  'shop-yearly': {
+    label: 'Shop',
+    amount: 499,
+    currency: 'INR',
+    term: 'yearly',
+    category: 'shop',
+    blurb: 'For print shops that want the whole business half without paying for it once: the same console, billed a year at a time.',
+    features: [
+      'Everything in Workspace, licensed for a year',
+      'Charge by the page, in colour and black & white, at rates you set',
+      'Guests pay before a sheet moves — checkout at the counter or on their phone',
+      "Today's takings, per-job margin and expenses in the owner's app",
+      'Shop console app with pricing manager, expenses and reports',
+      'Every printer you register sits under one licence',
+    ],
+  },
+  'shop-lifetime': {
+    label: 'Shop',
+    amount: 11999,
+    currency: 'INR',
+    term: 'lifetime',
+    category: 'shop',
+    blurb: 'The whole shop, bought once. For a counter that is not going anywhere and would rather never see a renewal.',
+    features: [
+      'Everything in Workspace, plus the whole business half',
+      'Charge by the page, in colour and black & white, at rates you set',
+      'Guests pay before a sheet moves — checkout at the counter or on their phone',
+      "Today's takings, per-job margin and expenses in the owner's app",
+      'Shop console app with pricing manager, expenses and reports',
+      'Every printer you register sits under one licence — no renewal, ever',
+      'Updates for the life of the product',
+    ],
+  },
 };
+
+/* A code's prefix says at a glance what was bought — WS for a workspace, SH for
+ * a shop — so the two kinds can never be confused in an inbox or over a
+ * counter. The prefix is cosmetic: the plan stored with the code is what
+ * decides what it unlocks, and codes minted before the prefixes existed (AC-)
+ * still redeem exactly as they did. */
+const PREFIXES = { workspace: 'WS', shop: 'SH' };
+const ANY_PREFIX = /^(AC|WS|SH)/;
 
 let file = null;
 let codes = [];
@@ -47,31 +104,36 @@ function block() {
   return out;
 }
 
-function newCode() {
+function newCode(prefix = PREFIX) {
   const parts = [];
   for (let i = 0; i < BLOCKS; i++) parts.push(block());
-  return `${PREFIX}-${parts.join('-')}`;
+  return `${prefix}-${parts.join('-')}`;
 }
 
 /**
- * Accepts "AC-7K4Q-2M9D-X3TB", "ac7k4q2m9dx3tb" and "7K4Q2M9DX3TB" as the same
- * code — people read these off an email and retype them.
+ * Accepts "WS-7K4Q-2M9D-X3TB", "ws7k4q2m9dx3tb" and "7K4Q2M9DX3TB" as the same
+ * code — people read these off an email and retype them, and nobody remembers
+ * the prefix. Returns the body only, which is what codes are looked up by, so a
+ * code keeps working whichever prefix the person typed (or was sent).
  */
 function normalize(value) {
   const raw = String(value || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
-  const body = (raw.startsWith(PREFIX) ? raw.slice(PREFIX.length) : raw);
+  const body = raw.replace(ANY_PREFIX, '');
   const want = GROUP * BLOCKS;
   if (body.length !== want) return null;
   const parts = [];
   for (let i = 0; i < BLOCKS; i++) parts.push(body.slice(i * GROUP, (i + 1) * GROUP));
-  return `${PREFIX}-${parts.join('-')}`;
+  return parts.join('-');
 }
 
 function newId() { return `code_${Date.now().toString(36)}${crypto.randomBytes(4).toString('hex')}`; }
 
 function rebuild() {
   byCode = new Map();
-  for (const c of codes) if (c.code) byCode.set(c.code, c);
+  for (const c of codes) {
+    const key = normalize(c.code);
+    if (key) byCode.set(key, c);
+  }
 }
 
 function save() {
@@ -100,6 +162,7 @@ function view(c, { reveal = false } = {}) {
     id: c.id,
     plan: c.plan,
     planLabel: (PLANS[c.plan] || {}).label || c.plan,
+    category: (PLANS[c.plan] || {}).category || null,
     email: c.email || null,
     status: status(c),
     note: c.note || '',
@@ -124,9 +187,9 @@ function status(c) {
 function all() { return codes.slice(); }
 function get(id) { return codes.find(c => c.id === id) || null; }
 function findByCode(value) {
-  const code = normalize(value);
-  if (!code) return null;
-  return byCode.get(code) || null;
+  const key = normalize(value);
+  if (!key) return null;
+  return byCode.get(key) || null;
 }
 
 /* ---------------- minting ---------------- */
@@ -143,12 +206,13 @@ function mint({ plan, email = null, note = '', days = null } = {}) {
   const address = email ? String(email).trim().toLowerCase() : null;
   if (address && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) throw new Error('That email address does not look right');
 
+  const prefix = PREFIXES[PLANS[key].category] || PREFIX;
   let code;
   let guard = 0;
   do {
-    code = newCode();
-  } while (byCode.has(code) && ++guard < 50);
-  if (byCode.has(code)) throw new Error('Could not generate a unique code — try again');
+    code = newCode(prefix);
+  } while (byCode.has(normalize(code)) && ++guard < 50);
+  if (byCode.has(normalize(code))) throw new Error('Could not generate a unique code — try again');
 
   const expiresAt = Number(days) > 0
     ? new Date(Date.now() + Number(days) * 86400 * 1000).toISOString()
@@ -219,6 +283,22 @@ function redeem(value, { email = null, accountId = null } = {}) {
   return entry;
 }
 
+/**
+ * Drop a code record entirely. Vendor-only, for support: a test code, a code
+ * issued to the wrong address, a licence that had to be reissued. Revoking is
+ * the gentler tool — it leaves the paper trail — so prefer that when the code
+ * was ever in somebody's hands.
+ */
+function remove(id) {
+  const index = codes.findIndex(c => c.id === id || normalize(c.code) === normalize(id));
+  if (index === -1) return null;
+  const [entry] = codes.splice(index, 1);
+  rebuild();
+  save();
+  log.warn('access code removed from the ledger');
+  return entry;
+}
+
 function revoke(id) {
   const entry = get(id);
   if (!entry) return null;
@@ -229,4 +309,7 @@ function revoke(id) {
   return entry;
 }
 
-module.exports = { init, mint, redeem, revoke, all, get, findByCode, normalize, view, status, blockingReason, PLANS };
+module.exports = {
+  init, mint, redeem, revoke, remove, all, get, findByCode, normalize, view, status, blockingReason,
+  PLANS, PREFIXES,
+};

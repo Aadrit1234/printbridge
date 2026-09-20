@@ -16,6 +16,12 @@
  * let another site read the response — that is why the allowlist is an explicit
  * list of origins rather than a wildcard.
  *
+ * A page and the service both on loopback are the same machine, however their
+ * ports differ: the desktop app serves its console from an ephemeral loopback
+ * port and proxies to the service on another one, and a dev server on 5173 does
+ * the same. Those are never treated as cross-site, or configuring an allowlist
+ * for the public site would lock the machine's own console out of its API.
+ *
  * And when an allowlist *is* configured, a cross-site request from an origin
  * that is not on it is refused outright (403). No CORS headers alone would let
  * a page on another site still *trigger* requests it cannot read — a form post
@@ -63,11 +69,38 @@ function sameOrigin(req) {
   return host ? `${String(proto).split(',')[0]}://${String(host).split(',')[0]}`.replace(/\/+$/, '') : '';
 }
 
+/** The hostname of an origin, lowercased and without IPv6 brackets. */
+function hostOf(origin) {
+  try {
+    return new URL(origin).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  } catch {
+    return '';
+  }
+}
+
+/** A hostname only this machine can answer on: a browser sends a loopback
+ * Origin only from a page it loaded from this machine. */
+function isLoopback(host) {
+  return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host);
+}
+
+/**
+ * True when the page and the service are both on loopback — the app's console,
+ * a dev server, any local UI on any port. Same machine, so not cross-site.
+ */
+function isLocalPair(req) {
+  const own = sameOrigin(req);
+  const origin = originOf(req);
+  if (!own || !origin) return false;
+  return isLoopback(hostOf(origin)) && isLoopback(hostOf(own));
+}
+
 /** True when this request comes from an allowlisted cross-site origin. */
 function isAllowedCrossSite(req) {
   const origin = originOf(req);
   if (!origin) return false;
   if (origin === sameOrigin(req)) return false;
+  if (isLocalPair(req)) return false;
   return allowedOrigins().includes(origin);
 }
 
@@ -80,6 +113,7 @@ function isAllowedCrossSite(req) {
 function isForeignCrossSite(req) {
   const origin = originOf(req);
   if (!origin) return false;
+  if (isLocalPair(req)) return false;
   return origin !== sameOrigin(req);
 }
 
@@ -120,4 +154,4 @@ function middleware() {
   };
 }
 
-module.exports = { middleware, allowedOrigins, isAllowedCrossSite, isForeignCrossSite, sameOrigin };
+module.exports = { middleware, allowedOrigins, isAllowedCrossSite, isForeignCrossSite, isLocalPair, sameOrigin };

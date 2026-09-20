@@ -7,8 +7,8 @@
  * existence by redeeming an access code, so an account always corresponds to
  * something that was actually bought (see services/access-codes.js).
  *
- * Passwords are scrypt hashed with a per-account salt, exactly like the machine
- * PIN, and a session is an opaque token in an HttpOnly cookie. Sessions are
+ * Passwords are scrypt hashed with a per-account salt, exactly like this
+ * machine's own sign-in, and a session is an opaque token in an HttpOnly cookie. Sessions are
  * persisted, so a restart does not sign everybody out.
  *
  * Persisted to data/accounts.json.

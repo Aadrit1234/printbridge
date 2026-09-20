@@ -83,12 +83,60 @@ function showAccount(account) {
   $('#ac-plan').textContent = account.planTerm
     ? `${account.planLabel || account.plan} · ${account.planTerm}`
     : (account.planLabel || account.plan);
+  $('#ac-paid').textContent = account.createdAt
+    ? new Date(account.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    : '—';
   $('#ac-status').textContent = account.status === 'active' ? 'Active' : account.status;
+  loadLicence();
 }
 
 function showGate() {
   $('#signed-in').hidden = true;
   $('#signed-out').hidden = false;
+  $('#ac-licence').hidden = true;
+  $('#ac-download').hidden = true;
+}
+
+/*
+ * The licence and the app it comes with. Both come from /account, which reads
+ * them off the plan the code carried — so this page can never offer the shop
+ * app to a workspace licence, or list features that were not bought.
+ */
+async function loadLicence() {
+  try {
+    const data = await api('/account');
+    const licence = data.licence;
+    const download = data.download;
+
+    if (licence && licence.features && licence.features.length) {
+      $('#ac-features').innerHTML = licence.features.map(f => `<li>${esc(f)}</li>`).join('');
+      $('#ac-licence').hidden = false;
+    } else {
+      $('#ac-licence').hidden = true;
+    }
+
+    if (download && download.primary) {
+      const link = $('#dl-primary');
+      link.href = download.primary.url;
+      link.textContent = `Download ${download.primary.label} — v${download.version}`;
+      $('#dl-note').textContent = download.primary.note;
+      const also = (download.also || [])[0];
+      if (also) {
+        $('#dl-also').hidden = false;
+        $('#dl-also').innerHTML = `Also yours: <a href="${esc(also.url)}" rel="noopener">${esc(also.label)}</a> — ${esc(also.note)}`;
+      } else {
+        $('#dl-also').hidden = true;
+      }
+      $('#ac-download').hidden = false;
+    } else {
+      $('#ac-download').hidden = true;
+    }
+  } catch {
+    /* Signed out underneath us, or the machine is off: the account card still
+     * shows what the session said, and this simply stays hidden. */
+    $('#ac-licence').hidden = true;
+    $('#ac-download').hidden = true;
+  }
 }
 
 async function refresh() {
@@ -110,7 +158,8 @@ async function loadPlans() {
   try {
     const { plans } = await api('/plans');
     $('#plan-rows').innerHTML = plans.map(p => (
-      '<div class="line"><span>' + esc(p.label) + (p.term === 'lifetime' ? ' · lifetime' : ' · per year') + '</span>' +
+      '<div class="line"><span>' + esc(p.label) + (p.term === 'lifetime' ? ' · lifetime' : ' · per year') +
+      '<em class="plan-app">' + esc(p.appLabel || '') + '</em></span>' +
       '<b>' + esc(MONEY(p.amount, p.currency)) + '</b></div>'
     )).join('');
   } catch {
@@ -121,12 +170,17 @@ async function loadPlans() {
 /* ------------------------------------------------------------------ actions */
 
 function normalizeCode(value) {
-  /* Just cosmetic while typing: the server accepts it any way it is written. */
+  /* Cosmetic while typing: the server accepts a code with or without its
+   * prefix, with or without dashes, in any case. The prefix is kept as typed so
+   * a WS- code is not silently relabelled — and so nobody thinks they were sent
+   * the wrong kind when the email says SH-. */
   const raw = String(value || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
-  const body = raw.startsWith('AC') ? raw.slice(2) : raw;
+  const prefix = (raw.match(/^(AC|WS|SH)/) || [''])[0];
+  const body = prefix ? raw.slice(prefix.length) : raw;
   const parts = [];
   for (let i = 0; i < 3; i++) parts.push(body.slice(i * 4, i * 4 + 4));
-  return 'AC-' + parts.filter(Boolean).join('-');
+  const grouped = parts.filter(Boolean).join('-');
+  return prefix ? `${prefix}-${grouped}` : grouped;
 }
 
 async function signUp(button) {

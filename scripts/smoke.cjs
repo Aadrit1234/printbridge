@@ -2,7 +2,7 @@
  * server, and the guest/admin separation around it.
  *
  *   node scripts/smoke.cjs                       (guest surface only)
- *   ADMIN_PIN=123456 node scripts/smoke.cjs      (adds the admin checks)
+ *   ADMIN_PASSWORD=… node scripts/smoke.cjs      (adds the console sign-in checks)
  *   BASE=http://192.168.1.20:8088 node scripts/smoke.cjs
  *
  * Works with any print backend: with no printer attached the outbox backend
@@ -123,7 +123,7 @@ async function main() {
   /* 1 — who is this server ------------------------------------------------ */
   const meta = await get(`${GS}/system/meta`);
   assert(meta.appName, 'meta.appName missing');
-  step(`server: ${meta.appName} v${meta.version} on ${meta.platform} — admin at ${meta.adminUrl}${meta.adminProtected ? ' (PIN protected)' : ' (open)'}`);
+  step(`server: ${meta.appName} v${meta.version} on ${meta.platform} — admin at ${meta.adminUrl}${meta.adminProtected ? ' (sign-in required)' : ' (open)'}`);
 
   /* 2 — the gate ---------------------------------------------------------- */
   const guarded = await call(`${AS}/jobs`, { admin: false, raw: true });
@@ -134,16 +134,17 @@ async function main() {
   assert.strictEqual(noDevice.res.status, 400, 'guest API must require a device id');
   step('guest API requires a device id (400)');
 
-  const pin = process.env.ADMIN_PIN;
-  if (pin) {
-    const wrong = await call(`${AS}/login`, { method: 'POST', body: { pin: 'definitely-wrong' }, raw: true });
-    assert.strictEqual(wrong.res.status, 401, 'a wrong PIN must be rejected');
-    step('wrong PIN rejected');
+  const adminUser = process.env.ADMIN_USER || 'admin';
+  const password = process.env.ADMIN_PASSWORD || process.env.ADMIN_PIN;
+  if (password) {
+    const wrong = await call(`${AS}/login`, { method: 'POST', body: { username: adminUser, password: 'definitely-wrong' }, raw: true });
+    assert.strictEqual(wrong.res.status, 401, 'a wrong password must be rejected');
+    step('wrong sign-in rejected');
 
     const res = await fetch(`${BASE}${AS}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin }),
+      body: JSON.stringify({ username: adminUser, password }),
     });
     assert.strictEqual(res.status, 200, `admin login failed (${res.status})`);
     const setCookie = res.headers.get('set-cookie') || '';
@@ -154,7 +155,7 @@ async function main() {
     const session = await get(`${AS}/session`, { admin: true });
     assert.strictEqual(session.authenticated, true, 'session not authenticated after login');
   } else {
-    warn('ADMIN_PIN not set — admin checks are skipped (start the server with ADMIN_PIN=…)');
+    warn('ADMIN_PASSWORD not set — the console sign-in checks are skipped (start the server with ADMIN_PASSWORD=… or set it in the app)');
   }
 
   /* 3 — printer + live stream -------------------------------------------- */

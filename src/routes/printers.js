@@ -11,7 +11,7 @@ const router = express.Router();
 /*
  * Who is asking decides what they can see.
  *
- *   req.scope === null              the machine itself (the PIN holder): every
+ *   req.scope === null              the machine itself (its own sign-in): every
  *                                   printer, including the seeded demo ones
  *   req.scope.accountId === 'acc…' an owner account: only printers they own
  *

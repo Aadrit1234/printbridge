@@ -27,6 +27,7 @@ router.get('/meta', (req, res) => {
     node: process.version,
     lanUrl: req.app.get('lanUrl'),
     addresses: req.app.get('lanAddresses') || [],
+    dataDir: req.app.get('dataDir') || null,
     hostname: os.hostname(),
     serverTime: new Date().toISOString(),
     features: { batchUpload: true, sse: true, lazyPreviews: true, office: true },

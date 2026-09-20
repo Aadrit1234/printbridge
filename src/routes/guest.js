@@ -4,7 +4,7 @@
  * Deliberately narrow:
  *   • it can only ever see jobs created by the same device (X-Device-Id),
  *   • it cannot change print defaults, printer configuration, storage, or read
- *     logs and diagnostics — all of that is the admin API behind the PIN,
+ *     logs and diagnostics — all of that is the admin API behind a sign-in,
  *   • printer status is a redacted summary (no queue names, no internals).
  *
  * Admin access to the whole system lives in src/routes/admin.js.

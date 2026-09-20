@@ -1,0 +1,63 @@
+# PrintBridge Client — the customer's app.
+#
+#   npm run desktop:build:client
+#
+# The smallest of the three, by design: it lists the printer machines on the
+# network, remembers the one you use and opens that machine's own print page in
+# a window. It holds no session, runs no service and prints nothing itself, so
+# nothing from the server or the console belongs in this installer — a customer
+# should never be handed a control surface by accident.
+appId: app.printbridge.client
+productName: PrintBridge Client
+directories:
+  output: release
+extraMetadata:
+  main: desktop/apps/client/main.js
+asar: false
+npmRebuild: false
+files:
+  # The entry point itself lives here: without this the build fails with
+  # "Application entry file desktop/apps/client/main.js does not exist".
+  - desktop/apps/client/**/*
+  - desktop/shared/**/*
+  - desktop/client-ui/**/*
+  - public/assets/**/*
+  - public/app/**/*
+  - public/print/**/*
+  - package.json
+  - '!**/*.map'
+  - '!server.js'
+  - '!src/**/*'
+  - '!scripts/**/*'
+  - '!desktop/renderer/**/*'
+  - '!data/**'
+  - '!dist/**'
+  - '!release/**'
+  - '!docs/**'
+  - '!.env'
+  - '!node_modules/sharp/**'
+  - '!node_modules/@napi-rs/**'
+  - '!node_modules/pdfjs-dist/**'
+  - '!node_modules/pdf-lib/**'
+  - '!node_modules/qrcode/**'
+  - '!node_modules/ipp/**'
+  - '!node_modules/express/**'
+  - '!node_modules/multer/**'
+  - '!**/{.git,.vercel,.github}/**'
+win:
+  icon: public/assets/icon-512.png
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: PrintBridge Client
+  artifactName: PrintBridge-Client-Setup-${version}.${ext}
+portable:
+  artifactName: PrintBridge-Client-${version}-portable.${ext}

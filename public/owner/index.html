@@ -52,6 +52,7 @@
         <h1 id="gate-title">Create your account</h1>
       </div>
       <p class="muted small" id="gate-sub">Your licence email contains an access code. It is the only thing that can create an account here — there is no sign-up that skips it.</p>
+      <p class="muted small" id="gate-buy">No code yet? <a href="/#pricing">Buy a licence</a> — your details, then the code by email.</p>
 
       <div class="tabs" id="gate-tabs" role="tablist">
         <button class="active" type="button" data-tab="signup" role="tab">I have an access code</button>
@@ -62,7 +63,8 @@
       <div class="tabpane" id="pane-signup">
         <label class="field">
           <span>Access code</span>
-          <input class="input mono" id="su-code" placeholder="AC-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" autocapitalize="characters">
+          <input class="input mono" id="su-code" placeholder="WS-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" autocapitalize="characters">
+          <small class="muted" id="su-code-hint">WS- for a workspace, SH- for a shop. Pasting it without the prefix or the dashes is fine too.</small>
         </label>
         <label class="field">
           <span>Your name</span>
@@ -104,8 +106,24 @@
       <div class="rows">
         <div class="line"><span>Email</span><b id="ac-email">—</b></div>
         <div class="line"><span>Licence</span><b id="ac-plan">—</b></div>
+        <div class="line"><span>Paid</span><b id="ac-paid">—</b></div>
         <div class="line"><span>Status</span><b id="ac-status">—</b></div>
       </div>
+
+      <!-- what the licence includes, read from the plan itself -->
+      <div class="licence" id="ac-licence" hidden>
+        <h2 class="sub-head">What your licence includes</h2>
+        <ul class="feature-list" id="ac-features"></ul>
+      </div>
+
+      <!-- and the app it buys -->
+      <div class="download" id="ac-download" hidden>
+        <h2 class="sub-head">Your app</h2>
+        <p class="muted small" id="dl-note"></p>
+        <a class="btn primary wide" id="dl-primary" href="#" rel="noopener">Download</a>
+        <p class="muted small" id="dl-also" hidden></p>
+      </div>
+
       <p class="muted small" id="ac-hint">Your printers live in the PrintBridge app on the machine that owns them. Plug a printer into that machine and the app sets it up and gives it a code.</p>
       <div class="row wrap" style="margin-top:14px">
         <button class="btn ghost" id="sign-out" type="button">Sign out</button>

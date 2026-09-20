@@ -1,21 +1,28 @@
 {
   "name": "printbridge",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Self-hosted print infrastructure: a walk-up print site with printer codes and token numbers, and a desktop app that runs the service, sets the printer up and holds the console — over a USB Windows queue, IPP/AirPrint, or CUPS.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "desktop": "electron desktop/main.js",
+    "desktop": "electron desktop/apps/workspace/main.js",
+    "desktop:workspace": "electron desktop/apps/workspace/main.js",
+    "desktop:shop": "electron desktop/apps/shop/main.js",
+    "desktop:client": "electron desktop/apps/client/main.js",
     "desktop:pack": "electron-builder --win --x64 --dir",
     "desktop:build": "electron-builder --win --x64",
+    "desktop:build:shop": "electron-builder --win --x64 --config electron-builder.shop.yml",
+    "desktop:build:client": "electron-builder --win --x64 --config electron-builder.client.yml",
     "build:web": "node scripts/build-web.cjs",
     "check:modules": "node scripts/check-modules.cjs",
-    "check": "node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/host.js && node scripts/check-modules.cjs && node --check server.js && node --check src/app.js && node --check src/cors.js && node --check src/cookies.js && node --check src/config.js && node --check src/logger.js && node --check src/storage.js && node --check src/events.js && node --check src/routes/jobs.js && node --check src/routes/files.js && node --check src/routes/printer.js && node --check src/routes/system.js && node --check src/routes/owner.js && node --check src/services/queue.js && node --check src/services/tickets.js && node --check src/services/converter.js && node --check src/services/rasterizer.js && node --check src/services/render.js && node --check src/services/pdf-text.js && node --check src/services/printers.js && node --check src/services/access-codes.js && node --check src/services/accounts.js && node --check src/services/discovery.js && node --check src/services/watchdog.js && node --check src/services/backends/registry.js && node --check src/services/backends/spooler.js && node --check src/services/backends/ipp.js && node --check src/services/backends/cups.js && node --check src/services/backends/outbox.js && node --check src/services/tools/windows.js && node --check scripts/fake-printer.cjs && node --check scripts/smoke-ipp.cjs && node --check scripts/smoke-walkup.cjs && node --check scripts/smoke-accounts.cjs && node --check scripts/build-web.cjs && node --check public/site.js && node --check public/print/print.js && node --check public/sw.js",
+    "check": "node --check desktop/shared/app.js && node --check desktop/shared/client-app.js && node --check desktop/shared/host.js && node --check desktop/shared/preload.js && node --check desktop/shared/preload-client.js && node --check desktop/shared/log.js && node --check desktop/shared/machines.js && node --check desktop/shared/nearby.js && node --check desktop/shared/profile.js && node --check desktop/shared/shop-store.js && node --check desktop/apps/workspace/profile.js && node --check desktop/apps/workspace/main.js && node --check desktop/apps/shop/profile.js && node --check desktop/apps/shop/main.js && node --check desktop/apps/client/profile.js && node --check desktop/apps/client/main.js && node scripts/check-modules.cjs && node --check server.js && node --check src/app.js && node --check src/cors.js && node --check src/cookies.js && node --check src/config.js && node --check src/logger.js && node --check src/storage.js && node --check src/events.js && node --check src/routes/jobs.js && node --check src/routes/files.js && node --check src/routes/printer.js && node --check src/routes/system.js && node --check src/routes/owner.js && node --check src/services/queue.js && node --check src/services/tickets.js && node --check src/services/converter.js && node --check src/services/rasterizer.js && node --check src/services/render.js && node --check src/services/pdf-text.js && node --check src/services/printers.js && node --check src/services/access-codes.js && node --check src/services/accounts.js && node --check src/services/shop.js && node --check src/services/orders.js && node --check src/services/mail.js && node --check src/services/download.js && node --check src/services/nearby.js && node --check src/routes/shop.js && node --check src/services/discovery.js && node --check src/services/watchdog.js && node --check src/services/backends/registry.js && node --check src/services/backends/spooler.js && node --check src/services/backends/ipp.js && node --check src/services/backends/cups.js && node --check src/services/backends/outbox.js && node --check src/services/tools/windows.js && node --check scripts/fake-printer.cjs && node --check scripts/smoke-ipp.cjs && node --check scripts/smoke-walkup.cjs && node --check scripts/smoke-accounts.cjs && node --check scripts/smoke-shop.cjs && node --check scripts/orders.cjs && node --check scripts/build-web.cjs && node --check public/site.js && node --check public/print/print.js && node --check public/sw.js",
     "smoke": "node scripts/smoke.cjs",
     "smoke:ipp": "node scripts/smoke-ipp.cjs",
     "smoke:walkup": "node scripts/smoke-walkup.cjs",
     "smoke:accounts": "node scripts/smoke-accounts.cjs",
+    "smoke:shop": "node scripts/smoke-shop.cjs",
+    "orders": "node scripts/orders.cjs",
     "fake-printer": "node scripts/fake-printer.cjs",
     "icons": "node scripts/make-icons.cjs"
   },
@@ -36,23 +43,20 @@
     }
   ],
   "build": {
-    "appId": "app.printbridge.desktop",
-    "productName": "PrintBridge",
+    "appId": "app.printbridge.workspace",
+    "productName": "PrintBridge Workspace",
     "directories": {
       "output": "release"
     },
     "extraMetadata": {
-      "main": "desktop/main.js"
+      "main": "desktop/apps/workspace/main.js"
     },
     "files": [
       "server.js",
       "src/**/*",
       "public/**/*",
       "scripts/**/*",
-      "desktop/main.js",
-      "desktop/preload.js",
-      "desktop/host.js",
-      "desktop/renderer/**/*",
+      "desktop/**/*",
       "package.json",
       "!**/*.map",
       "!data/**",
@@ -78,10 +82,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "PrintBridge",
-      "artifactName": "PrintBridge-Setup-${version}.${ext}"
+      "artifactName": "PrintBridge-Workspace-Setup-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "PrintBridge-${version}-portable.${ext}"
+      "artifactName": "PrintBridge-Workspace-${version}-portable.${ext}"
     }
   },
   "dependencies": {

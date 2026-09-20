@@ -1,20 +1,25 @@
 'use strict';
-/* PrintBridge desktop — the app you run on the laptop that owns the printer.
+/* PrintBridge desktop — the console core, shared by the machine and shop apps.
  *
  * It does three things a browser tab cannot:
  *
- *   1. It runs the server. The window is not the product; the print service is,
- *      and this process owns its lifetime so a shop never has to open a terminal.
- *   2. It shows the setup console (/desktop) — find the printer, adopt it, give
- *      it a code, print a sticker, prove it with a real test.
- *   3. It keeps itself alive: start with Windows, survive a closed window
- *      (it hides to the tray), and stay awake while jobs are in flight.
+ *   1. It runs the server — the machine's app only (profile.supervises). The
+ *      window is not the product; the print service is, and this process owns
+ *      its lifetime so a shop never has to open a terminal.
+ *   2. It shows the console: the machine's own operations, and — in the shop's
+ *      app — the business on top of them.
+ *   3. It keeps itself alive: start with Windows, survive a closed window (it
+ *      hides to the tray), stay awake while jobs are in flight, and update
+ *      itself.
  *
  * Two ways to run, and both are normal:
- *   • no server on the port  → we start one as a child process and stop it when
- *     the app quits;
- *   • a server already there → we attach to it (a terminal `npm start`, or a
- *     second launch) rather than starting a second copy on ports 8089, 8090…
+ *   • the machine's app → no server on the port? Start one as a child process
+ *     and stop it when the app quits. A server already there (a terminal
+ *     `npm start`, a second launch)? Attach to it, rather than opening a second
+ *     copy on ports 8089, 8090…
+ *   • the shop's app → no service at all. Its window talks to a machine it found
+ *     on the network through the same loopback host, and its business panels
+ *     keep working when that machine is not reachable.
  *
  * The child is spawned as Node (ELECTRON_RUN_AS_NODE), so the server code is
  * exactly the code the tests run against — no Electron in the print path.
@@ -26,16 +31,29 @@ const { fork } = require('child_process');
 const {
   app, BrowserWindow, Menu, Tray, shell, ipcMain, dialog, powerSaveBlocker, nativeImage,
 } = require('electron');
+
+/* The version of *this* app, not of Electron. Under `electron desktop/apps/x`
+ * there is no package.json beside the main script, so app.getVersion() answers
+ * with Electron's own version (33.x) and the app then claims the running service
+ * is a different build than itself. Read the real one in a dev run. */
+const APP_VERSION = app.isPackaged
+  ? app.getVersion()
+  : require('../../package.json').version;
 const host = require('./host');
+const log = require('./log');
+const machines = require('./machines');
+const nearby = require('./nearby');
+const shopStore = require('./shop-store');
 
 const DEV = !app.isPackaged;
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.join(__dirname, '..', '..');
+/* Which of the three apps this is. Set by start(); nothing here works without it. */
+let profile = null;
 const PREFERRED_PORT = parseInt(process.env.PORT, 10) || 8088;
 const PORT_TRIES = 12;
-const LOG_LIMIT = 900;
 
 /* A packaged build cannot write next to its own files (Program Files is not a
- * data directory), so it keeps jobs, printers and the PIN under the user
+ * data directory), so it keeps jobs, printers and the console sign-in under the user
  * profile. A dev run uses ./data, the same place the tests use — unless
  * DATA_DIR says otherwise, which is how you point the app at a scratch folder
  * without touching a live install's jobs and printers. */
@@ -57,11 +75,11 @@ let updateState = { kind: 'off' };
 let startedByUs = false;
 let quitting = false;
 let keepAwakeBlocker = null;
-let adminPin = null; // in memory only, for the self-test; never written down
-const lines = [];
+let adminPassword = null; // in memory only, for the self-test; never written down
 
 /* ---------------------------------------------------------------- logging */
 
+/** The log file lives beside this app's data — one per app, never shared. */
 function logFile() {
   try {
     const dir = app.getPath('userData');
@@ -72,15 +90,16 @@ function logFile() {
   }
 }
 
+let logStarted = false;
+
 function push(line) {
-  const clean = String(line).replace(/\s+$/, '');
-  if (!clean) return;
-  const stamp = new Date().toISOString().slice(11, 19);
-  lines.push(`[${stamp}] ${clean}`);
-  if (lines.length > LOG_LIMIT) lines.splice(0, lines.length - LOG_LIMIT);
-  if (win && !win.isDestroyed()) win.webContents.send('pb:log', `[${stamp}] ${clean}`);
-  const file = logFile();
-  if (file) { try { fs.appendFileSync(file, `${new Date().toISOString()} ${clean}\n`); } catch { /* best effort */ } }
+  if (!logStarted) {
+    logStarted = true;
+    log.init({ filePath: logFile() });
+  }
+  const written = log.write(line);
+  if (win && !win.isDestroyed()) win.webContents.send('pb:log', written);
+  return written;
 }
 
 function note(message) {
@@ -231,7 +250,7 @@ function createWindow() {
     minHeight: 660,
     show: false,
     backgroundColor: '#070a11',
-    title: 'PrintBridge',
+    title: profile.windowTitle,
     icon: iconImage() || undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -288,13 +307,73 @@ function go(hash) {
 
 /* ---------------------------------------------------------------- menu */
 
+const PANEL_LABELS = {
+  connection: 'Machines',
+  setup: 'Setup',
+  queue: 'Queue',
+  codes: 'Print codes',
+  printers: 'Printers',
+  printer: 'Printer connection',
+  pricing: 'Pricing',
+  expenses: 'Expenses',
+  reports: 'Revenue & reports',
+  settings: 'Settings',
+  access: 'Access',
+  account: 'Account',
+};
+
+/* A menu item for a panel this app does not have is worse than no menu item:
+ * it teaches people the app is broken. The list comes from the profile. */
+function panelMenu() {
+  return [
+    ...profile.panels.map((name, index) => ({
+      label: PANEL_LABELS[name] || name,
+      accelerator: index < 9 ? `CmdOrCtrl+${index + 1}` : undefined,
+      click: () => go(`#/${name}`),
+    })),
+    { type: 'separator' },
+    { label: 'The guest print page', click: () => openGuest('print') },
+    { label: 'The public site', click: () => openGuest('') },
+  ];
+}
+
+/** Switch which machine the console is looking at. */
+function useMachine(machine) {
+  const saved = machines.use(machine.id || machine);
+  if (!saved) return null;
+  note(`working with ${saved.name} (${saved.id})`);
+  if (win && !win.isDestroyed()) win.reload();
+  return saved;
+}
+
+/** The machine the console is pointed at, in the menu, where you look for it. */
+function machineMenu() {
+  const now = machines.current();
+  const known = machines.list().slice(0, 8);
+  return {
+    label: 'Machine',
+    submenu: [
+      { label: now ? `Working with ${now.name}` : 'No machine chosen yet', enabled: false },
+      { type: 'separator' },
+      { label: 'Find machines on this network', click: () => go('#/connection') },
+      ...(known.length
+        ? [{ type: 'separator' }, ...known.map(m => ({
+          label: `${now && now.id === m.id ? '● ' : ''}${m.name}`,
+          tooltip: m.id,
+          click: () => useMachine(m),
+        }))]
+        : []),
+    ],
+  };
+}
+
 function buildMenu() {
   const awake = () => Boolean(keepAwakeBlocker && powerSaveBlocker.isStarted(keepAwakeBlocker));
   const template = [
     {
       label: 'PrintBridge',
       submenu: [
-        { label: `Version ${app.getVersion()}${DEV ? ' (dev)' : ''}`, enabled: false },
+        { label: `Version ${APP_VERSION}${DEV ? ' (dev)' : ''}`, enabled: false },
         { type: 'separator' },
         {
           label: 'Open data folder',
@@ -303,7 +382,7 @@ function buildMenu() {
         {
           label: 'Open log file',
           click: () => {
-            const file = logFile();
+            const file = log.path();
             if (file) shell.openPath(file);
           },
         },
@@ -313,21 +392,10 @@ function buildMenu() {
     },
     {
       label: 'Panels',
-      submenu: [
-        { label: 'Setup', accelerator: 'CmdOrCtrl+1', click: () => go('#/setup') },
-        { label: 'Queue', accelerator: 'CmdOrCtrl+2', click: () => go('#/queue') },
-        { label: 'Print codes', accelerator: 'CmdOrCtrl+3', click: () => go('#/codes') },
-        { label: 'Printers', accelerator: 'CmdOrCtrl+4', click: () => go('#/printers') },
-        { label: 'Printer connection', accelerator: 'CmdOrCtrl+5', click: () => go('#/printer') },
-        { label: 'Settings', accelerator: 'CmdOrCtrl+6', click: () => go('#/settings') },
-        { label: 'Access', accelerator: 'CmdOrCtrl+7', click: () => go('#/access') },
-        { label: 'Account', accelerator: 'CmdOrCtrl+8', click: () => go('#/account') },
-        { type: 'separator' },
-        { label: 'The guest print page', click: () => openGuest('print') },
-        { label: 'The public site', click: () => openGuest('') },
-      ],
+      submenu: panelMenu(),
     },
-    {
+    ...(profile.picksMachine ? [machineMenu()] : []),
+    ...(profile.supervises ? [{
       label: 'Server',
       submenu: [
         {
@@ -349,15 +417,14 @@ function buildMenu() {
           },
         },
       ],
-    },
+    }] : []),
     {
       label: 'Tools',
       submenu: [
-        {
+        ...(profile.supervises ? [{
           label: 'Run the real self-test',
           click: () => { if (win && !win.isDestroyed()) { win.show(); win.focus(); win.webContents.send('pb:run-selftest'); } },
-        },
-        { type: 'separator' },
+        }, { type: 'separator' }] : []),
         { label: 'Check for updates now', click: () => { checkForUpdates().catch(() => {}); } },
         { label: 'Restart to install the update', click: () => installUpdate(), enabled: false, id: 'menu-install-update' },
         { type: 'separator' },
@@ -401,7 +468,7 @@ function buildMenu() {
             type: 'info',
             title: 'PrintBridge data',
             message: 'Jobs, printers and settings',
-            detail: `${DATA_DIR}\n\nThe PIN is stored here as a hash — it cannot be read back. Delete access.json to reset it and a new PIN will be printed on the next start.`,
+            detail: `${DATA_DIR}\n\nThe console sign-in is stored here as a hash — the password cannot be read back, only reset. Delete access.json to reset it, and a new username and password will be printed on the next start.`,
             buttons: ['OK'],
           }),
         },
@@ -419,7 +486,7 @@ function createTray() {
   } catch {
     return;
   }
-  tray.setToolTip(`PrintBridge — print service on port ${serverPort}`);
+  tray.setToolTip(`PrintBridge ${profile.role === 'machine' ? `— print service on port ${serverPort}` : `— ${profile.productName}`}`);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open PrintBridge', click: () => { if (win) { win.show(); win.focus(); } else createWindow(); } },
     { label: 'Setup', click: () => go('#/setup') },
@@ -495,11 +562,11 @@ function runSuite(script, env) {
 
 async function selfTest() {
   const base = `http://127.0.0.1:${serverPort}`;
-  const env = { BASE: base, DATA_DIR, ADMIN_PIN: adminPin || '' };
+  const env = { BASE: base, DATA_DIR, ADMIN_PASSWORD: adminPassword || '' };
   const report = [];
   report.push(`service: ${base} (${startedByUs ? 'started by this app' : 'already running'})`);
   report.push(`data directory: ${DATA_DIR}`);
-  report.push(adminPin ? 'admin PIN: held in memory for this run' : 'admin PIN: not available — sign in on the Access step first');
+  report.push(adminPassword ? 'console sign-in: held in memory for this run' : 'console sign-in: not available — sign in first, then run this');
 
   const suites = [
     ['API smoke', 'scripts/smoke.cjs'],
@@ -587,7 +654,7 @@ function installUpdate() {
 /* ---------------------------------------------------------------- guest windows */
 
 /* The guest page and the public site belong in a plain window (or the customer's
- * own browser), never in the console window where the PIN session lives. */
+ * own browser), never in the console window where the machine session lives. */
 let guestWin = null;
 
 function openGuest(view) {
@@ -618,11 +685,81 @@ function wireIpc() {
     port: serverPort,
     dataDir: DATA_DIR,
     packaged: app.isPackaged,
-    version: app.getVersion(),
+    version: APP_VERSION,
     startedByUs,
     keepAwake: Boolean(keepAwakeBlocker),
     autostart: autostartEnabled(),
+    /* Which app this is decides what the console shows: a shop's app has
+     * pricing, expenses and revenue, a machine's app has setup and diagnostics.
+     * The renderer reads this and renders only what belongs to it. */
+    profile: {
+      id: profile.id,
+      role: profile.role,
+      productName: profile.productName,
+      tagline: profile.tagline,
+      panels: profile.panels,
+      home: profile.home,
+      console: profile.console,
+      supervises: profile.supervises,
+      picksMachine: profile.picksMachine,
+      offlineHint: profile.offlineHint,
+    },
+    machine: machines.current(),
   }));
+
+  /* ---------------- machines (the shop and client apps) ---------------- */
+
+  ipcMain.handle('pb:machines:list', () => ({
+    current: machines.current(),
+    known: machines.list(),
+  }));
+
+  ipcMain.handle('pb:machines:discover', async () => {
+    const found = await nearby.browse({ timeoutMs: 2600 });
+    /* Confirm each one actually answers, and learn what it is while we are
+     * there: an mDNS record can outlive the machine that published it. */
+    const checked = await Promise.all(found.map(async (machine) => {
+      const alive = await nearby.confirm(machine.host, machine.port).catch(() => ({ ok: false }));
+      return { ...machine, ...alive, reachable: Boolean(alive.ok) };
+    }));
+    push(`network scan: ${checked.length} machine(s) answered`);
+    return { current: machines.current(), found: checked, known: machines.list() };
+  });
+
+  ipcMain.handle('pb:machines:check', async (event, address) => {
+    const parsed = machines.address(address);
+    if (!parsed) return { ok: false, reason: 'That is not an address I can use' };
+    const alive = await nearby.confirm(parsed.host, parsed.port).catch(() => ({ ok: false }));
+    if (!alive.ok) return { ok: false, reason: alive.reason || 'nothing answered' };
+    const saved = machines.remember({
+      ...parsed,
+      name: (address && address.name) || alive.hostname || parsed.host,
+      version: alive.version,
+      source: 'manual',
+    }, { lastSeen: new Date().toISOString() });
+    buildMenu();
+    return { ok: true, machine: saved, app: alive.app, version: alive.version };
+  });
+
+  ipcMain.handle('pb:machines:use', (event, machine) => {
+    const saved = useMachine(machine);
+    return saved ? { ok: true, machine: saved } : { ok: false, error: 'That does not look like an address' };
+  });
+
+  ipcMain.handle('pb:machines:forget', (event, id) => ({ ok: machines.forget(String(id || '')) }));
+
+  /* ---------------- the shop's own document (local first) ---------------- */
+
+  ipcMain.handle('pb:shop:load', (event, accountId) => {
+    if (!shopStore.safeId(accountId)) return { ok: false, error: 'No account signed in' };
+    return { ok: true, ...shopStore.load(accountId) };
+  });
+
+  ipcMain.handle('pb:shop:save', (event, accountId, state) => {
+    if (!shopStore.safeId(accountId)) return { ok: false, error: 'No account signed in' };
+    const result = shopStore.save(accountId, state);
+    return result === true ? { ok: true, savedAt: new Date().toISOString() } : { ok: false, error: (result && result.error) || 'could not write the local copy' };
+  });
 
   ipcMain.handle('pb:server:restart', async () => {
     const meta = await restartServer();
@@ -631,10 +768,12 @@ function wireIpc() {
 
   ipcMain.handle('pb:open-data', () => shell.openPath(DATA_DIR));
   ipcMain.handle('pb:open-external', (event, url) => shell.openExternal(String(url)));
-  ipcMain.handle('pb:pin', (event, pin) => { adminPin = String(pin || '') || null; return true; });
-  ipcMain.handle('pb:selftest', () => selfTest());
-  ipcMain.handle('pb:logs:get', () => ({ lines: lines.slice(-400) }));
-  ipcMain.handle('pb:logs:clear', () => { lines.length = 0; return true; });
+  ipcMain.handle('pb:password', (event, password) => { adminPassword = String(password || '') || null; return true; });
+  ipcMain.handle('pb:selftest', () => (profile.supervises
+    ? selfTest()
+    : { ok: false, lines: ['This app talks to a printer machine; its own suites run in the machine\'s app.'] }));
+  ipcMain.handle('pb:logs:get', () => ({ lines: log.tail(400), file: log.path() }));
+  ipcMain.handle('pb:logs:clear', () => { log.clear(); return true; });
   ipcMain.handle('pb:autostart:get', () => ({ supported: app.isPackaged, enabled: autostartEnabled() }));
   ipcMain.handle('pb:autostart:set', (event, enabled) => ({ supported: app.isPackaged, enabled: setAutostart(enabled) }));
   ipcMain.handle('pb:keepawake:get', () => ({ enabled: Boolean(keepAwakeBlocker) }));
@@ -652,9 +791,26 @@ function quit() {
   app.quit();
 }
 
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-} else {
+/**
+ * Start one of the console apps.
+ *
+ * The profile says which: the machine's app runs the print service here, the
+ * shop's app points the same console at a machine on the network and keeps the
+ * business panel working when that machine is away. Everything else — the
+ * window, the host, the tray, updates, the panel routes — is shared.
+ */
+function start(appProfile) {
+  profile = appProfile;
+  /* Each app keeps its own user-data folder. Machines, the local copy of the
+   * shop's books and the log must never be shared between a machine's app and a
+   * client's — they are different products on the same PC. */
+  app.setName(profile.productName);
+
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+    return false;
+  }
+
   app.on('second-instance', () => {
     if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
   });
@@ -675,37 +831,52 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
-    if (process.platform === 'win32') app.setAppUserModelId('app.printbridge.desktop');
+    app.setAppUserModelId(profile.appId);
+    machines.init({ userData: app.getPath('userData') });
+    shopStore.init({ userData: app.getPath('userData') });
     wireIpc();
     buildMenu();
 
     try {
-      const choice = await pickPort();
-      serverPort = choice.port;
-      if (choice.external) {
-        note(`attaching to the print service already running on port ${serverPort}`);
-        startedByUs = false;
+      if (profile.supervises) {
+        const choice = await pickPort();
+        serverPort = choice.port;
+        if (choice.external) {
+          note(`attaching to the print service already running on port ${serverPort}`);
+          startedByUs = false;
+        } else {
+          startServer(serverPort);
+        }
+        const meta = await waitForServer(serverPort, 30000);
+        if (!meta) {
+          createWindow();
+          loadError(`Nothing answered on port ${serverPort} within 30 seconds.`);
+          buildMenu();
+          return;
+        }
+        note(`PrintBridge ${meta.version} is serving on ${meta.lanUrl || `http://127.0.0.1:${serverPort}`}`);
+        if (meta.version !== APP_VERSION) {
+          note(`note: the running service is ${meta.version} and this app is ${APP_VERSION} — restart the service from the app to bring them together`);
+        }
       } else {
-        startServer(serverPort);
-      }
-      const meta = await waitForServer(serverPort, 30000);
-      if (!meta) {
-        createWindow();
-        loadError(`Nothing answered on port ${serverPort} within 30 seconds.`);
-        buildMenu();
-        return;
-      }
-      note(`PrintBridge ${meta.version} is serving on ${meta.lanUrl || `http://127.0.0.1:${serverPort}`}`);
-      if (meta.version !== app.getVersion()) {
-        note(`note: the running service is ${meta.version} and this app is ${app.getVersion()} — restart the service from the app to bring them together`);
+        /* The shop's app runs no service of its own. Its window shows a machine
+         * on the network — and shows its own business panels when that machine
+         * is not there, which is the whole point of the local copy. */
+        const machine = machines.current();
+        note(machine
+          ? `console pointed at ${machine.name} (${machine.id})`
+          : 'no machine chosen yet — the Machines panel is where that happens');
       }
 
       /* The interface host: the window points here, and everything except the
-       * console itself is proxied to the service. */
+       * console itself is proxied — to this machine's own service, or to the
+       * machine this app has been pointed at. */
       appHost = await host.start({
-        root: path.join(__dirname, 'renderer'),
+        root: path.join(__dirname, '..', 'renderer'),
         publicDir: path.join(ROOT, 'public'),
-        serverPort: () => serverPort,
+        target: () => (profile.supervises
+          ? (serverPort ? { host: '127.0.0.1', port: serverPort } : null)
+          : machines.target()),
         log: push,
       });
 
@@ -719,5 +890,9 @@ if (!app.requestSingleInstanceLock()) {
       loadError(error.message);
     }
   });
+
+  return true;
 }
+
+module.exports = { start };
 

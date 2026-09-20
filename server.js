@@ -69,15 +69,15 @@ function banner(baseUrl, extra) {
       '',
       `  Main site    ${baseUrl}          (about · product · pricing · contact)`,
       `  Print site   ${printUrl}          (what the QR points at)`,
-      `  Admin site   ${extra.admin.url}`,
       `  Owner site   ${baseUrl}/owner          (sign in with your access code)`,
+      '  Console      in the PrintBridge app on this machine — there is no web console',
       ...(extra.walkUp && extra.walkUp.length
         ? ['', '  Walk-up printer codes (enter these on the print site):',
            ...extra.walkUp.map(p => `    ${p.code}   ${p.name} · ${p.category}${p.active === false ? ' (paused)' : ''}`)]
         : []),
-      extra.admin.pin
-        ? `  Admin PIN    ${extra.admin.pin}    (first run — change it in Admin → Access)`
-        : '  Admin PIN    as you set it (Admin → Access to change)',
+      extra.admin.password
+        ? `  Sign-in      ${extra.admin.user} / ${extra.admin.password}    (generated on first run — change it in the app under Access)`
+        : `  Sign-in      ${extra.admin.user} — the password is the one you set (the app, under Access, to change it)`,
       '',
       '  Owners sign in at /owner with the access code from their licence email.',
       extra.operator
@@ -115,6 +115,12 @@ async function main() {
   require('./src/services/accounts').init(DATA_DIR);
   auth.init(DATA_DIR);
   require('./src/services/printers').init(DATA_DIR);
+  /* Business data: one document per owner account (services, expenses). */
+  require('./src/services/shop').init(DATA_DIR);
+  /* The order ledger, and where a licence email goes when mail is not set up:
+   * data/orders.json and data/mail-outbox/. */
+  require('./src/services/mail').init(DATA_DIR);
+  require('./src/services/orders').init(DATA_DIR);
   logger.setLevel(process.env.LOG_LEVEL || 'info');
 
   const watchdog = require('./src/services/watchdog');
@@ -127,16 +133,31 @@ async function main() {
   const addresses = lanAddresses().map(ip => `http://${ip}:${PORT}`);
   const lanUrl = addresses[0] || `http://localhost:${PORT}`;
 
+  const nearby = require('./src/services/nearby');
   const app = createApp({ publicDir: path.join(__dirname, 'public'), lanUrl, lanAddresses: addresses });
+  // Where this install keeps its data. Exposed on /api/admin/system/meta so a
+  // test suite (or a support call) can look in the right folder instead of
+  // guessing <repo>/data and reporting a false failure.
+  app.set('dataDir', DATA_DIR);
   const server = app.listen(PORT, HOST, async () => {
     log.info(`listening on ${HOST}:${PORT}`);
+    /* Announce this machine so the shop and client apps can list it instead of
+     * asking anyone to type an address. Best-effort: a network that blocks
+     * multicast still works for everyone who knows the address. */
+    nearby.advertise({
+      port: PORT,
+      name: config.get('appName') || 'PrintBridge',
+      version: require('./package.json').version,
+      tier: require('./src/services/printers').all().some(p => p.category === 'shop') ? 'shop' : 'workspace',
+      path: '/print/',
+    });
     const snapshot = await registry.state({ fresh: true }).catch(() => null);
     banner(lanUrl, {
       addresses,
       backend: snapshot ? `${snapshot.active.label} (${snapshot.active.id})` : 'resolving…',
       reason: snapshot ? snapshot.reason : '',
       dataDir: DATA_DIR,
-      admin: { url: `${lanUrl}/admin`, pin: auth.generatedPin },
+      admin: { url: `${lanUrl}/admin`, user: auth.username, password: auth.generatedPassword },
       operator: Boolean(String(process.env.OPERATOR_KEY || '').trim().length >= 16),
       owners: require('./src/services/accounts').all().length,
       walkUp: require('./src/services/printers').all(),
@@ -156,6 +177,7 @@ async function main() {
   const shutdown = async (signal) => {
     log.warn(`${signal} received — shutting down`);
     watchdog.stop();
+    nearby.stop();
     try { await storage.save(); } catch { /* noop */ }
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 3000).unref();
