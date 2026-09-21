@@ -275,6 +275,57 @@ async function main() {
       console.log('  (this base is not loopback — skipped the local-page CORS check)');
     }
 
+    /* The app's own host proxies to the machine, and it must not forward the
+     * browser's Origin when it does. That Origin describes the window talking to
+     * the host that served it — a loopback origin — while the machine it is
+     * proxied to is often on another address entirely. Forwarding it made a
+     * machine refuse its own console's sign-in with 403 "this origin is not
+     * allowed" whenever ALLOWED_ORIGINS was configured, which is every real
+     * install that also serves the website. A spy upstream is the honest way to
+     * check a request's headers: it records what actually arrived. */
+    const http = require('http');
+    let seen = null;
+    const spy = http.createServer((spyReq, spyRes) => {
+      seen = { origin: spyReq.headers.origin, host: spyReq.headers.host };
+      spyRes.writeHead(200, { 'Content-Type': 'application/json' });
+      spyRes.end('{"ok":true}');
+    });
+    await new Promise((resolve) => spy.listen(0, '127.0.0.1', resolve));
+    const appHost = require('../desktop/shared/host');
+    const proxied = await appHost.start({
+      root: path.join(__dirname, '..', 'desktop', 'renderer'),
+      publicDir: path.join(__dirname, '..', 'public'),
+      target: () => ({ host: '127.0.0.1', port: spy.address().port }),
+      log: () => {},
+    });
+    try {
+      const through = await fetch(`${proxied.url}api/admin/system/meta`, {
+        headers: { origin: proxied.url.replace(/\/$/, '') },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      ok('the app host answers for the machine it proxies to', through.status === 200, `${through.status}`);
+      ok('the host does not forward the browser Origin to the machine',
+        Boolean(seen) && seen.origin === undefined,
+        `upstream saw origin=${seen && seen.origin}`);
+      ok('the host rewrites Host to the target, not its own',
+        Boolean(seen) && seen.host === `127.0.0.1:${spy.address().port}`,
+        `upstream saw host=${seen && seen.host}`);
+    } finally {
+      await proxied.close();
+      await new Promise((resolve) => spy.close(resolve));
+    }
+
+    /* The shop's app and the customer's app find a printer machine by asking its
+     * *guest* meta what it is, because that is the only meta a stranger's app may
+     * read. It names the app as `appName` — and reading the admin-shaped keys
+     * instead made every machine on every network invisible to both apps, with
+     * the probe reporting a perfectly good PrintBridge as "something else". */
+    const nearby = require('../desktop/shared/nearby');
+    const parsedBase = new URL(BASE);
+    const alive = await nearby.confirm(parsedBase.hostname, Number(parsedBase.port) || 80);
+    ok('a machine identifies itself to discovery (app name + version)',
+      alive.ok === true, alive.ok ? `${alive.app} ${alive.version}` : alive.reason);
+
     /* ---------------- codes are scoped to one device ---------------- */
     const foreign = await req(`${GS}/tickets/${encodeURIComponent(wToken)}`, { device: OTHER_DEVICE });
     ok('another device cannot read our code', foreign.status === 404, foreign.payload.error);

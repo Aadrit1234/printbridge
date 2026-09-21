@@ -40,13 +40,19 @@ function text(value, max) {
   return String(value == null ? '' : value).trim().slice(0, max);
 }
 
-/** Accept what a human types, what mDNS reports, or a full URL. */
+/**
+ * Accept what a human types, what mDNS reports, a full URL, or an id — an id
+ * *is* `host:port` (see idFor), and the renderer sends nothing else when you
+ * press "Use this" on a machine it just found. Reading only `host`/`port`/
+ * `address`/`url` made that a silent no-op: the button did nothing, no error,
+ * and the picker sat there saying nothing was chosen.
+ */
 function address(input) {
   const raw = typeof input === 'string' ? { address: input } : (input || {});
   let host = text(raw.host, 120);
   let port = Number(raw.port) || 0;
 
-  const asUrl = text(raw.address || raw.url, 300);
+  const asUrl = text(raw.address || raw.url || raw.id, 300);
   if (asUrl) {
     const withScheme = /^https?:\/\//i.test(asUrl) ? asUrl : `http://${asUrl}`;
     try {
@@ -118,7 +124,11 @@ function remember(input, extra = {}) {
   if (!entry) return null;
   const existing = state.known.find(m => m.id === entry.id);
   if (existing) {
-    existing.name = entry.name || existing.name;
+    /* Only a real name may replace the one we have. `clean` fills a missing name
+     * in with the address, so a call that knows nothing about the machine would
+     * otherwise rename it to its own address. */
+    const betterName = entry.name && entry.name !== entry.id ? entry.name : '';
+    existing.name = betterName || existing.name;
     existing.tier = entry.tier || existing.tier;
     existing.version = entry.version || existing.version;
     existing.source = existing.source === 'manual' ? 'manual' : entry.source;

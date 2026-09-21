@@ -92,5 +92,9 @@ contextBridge.exposeInMainWorld('printbridgeDesktop', {
   shop: {
     load: (accountId) => ipcRenderer.invoke('pb:shop:load', String(accountId || '')),
     save: (accountId, state) => ipcRenderer.invoke('pb:shop:save', String(accountId || ''), state || {}),
+    /* Which licence this computer last used, so the books are readable with the
+     * machine switched off — see shared/shop-store.js. */
+    rememberAccount: (account, machineId) => ipcRenderer.invoke('pb:shop:account:remember', account || {}, String(machineId || '')),
+    lastAccount: (machineId) => ipcRenderer.invoke('pb:shop:account:last', String(machineId || '')),
   },
 });

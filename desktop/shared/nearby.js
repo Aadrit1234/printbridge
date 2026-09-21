@@ -66,6 +66,11 @@ function browse({ timeoutMs = DEFAULT_TIMEOUT } = {}) {
         if (found.has(key)) return;
         const txt = service.txt || {};
         found.set(key, {
+          /* The id is the address, and it is what every button on the machine
+           * picker carries (`data-use`). Leaving it out made each row's "Use
+           * this" a no-op: the button sent the string "undefined", nothing
+           * matched, and the machine was never chosen. */
+          id: key,
           host,
           port: Number(service.port) || 8088,
           name: txt.name || service.name || host,
@@ -73,6 +78,9 @@ function browse({ timeoutMs = DEFAULT_TIMEOUT } = {}) {
           version: txt.app || '',
           path: txt.path || '/print/',
           local: mine.has(host),
+          /* `source` is what the machine store keeps (it only knows mdns and
+           * manual); `via` is what this list shows. */
+          source: 'mdns',
           via: 'mdns',
           seenAt: new Date().toISOString(),
         });
@@ -86,7 +94,18 @@ function browse({ timeoutMs = DEFAULT_TIMEOUT } = {}) {
   });
 }
 
-/** Ask a host whether a PrintBridge service is actually answering there. */
+/**
+ * Ask a host whether a PrintBridge service is actually answering there.
+ *
+ * The probe goes to the *guest* meta, which is the only one a stranger's app may
+ * read — and that endpoint deliberately names the app and nothing about the
+ * control room behind it, so it answers `appName` and `host`, not `app` and
+ * `hostname`. Reading only the admin-shaped keys is how this used to fail on
+ * every real machine: discovery found the mDNS record, probed it, got a
+ * perfectly good PrintBridge answer, and reported "something else answers at
+ * that address" — so the shop's app counted zero machines on a network with one
+ * sitting on it, and `By address` refused the machine's own address.
+ */
 async function confirm(host, port, { timeoutMs = 1500 } = {}) {
   const http = require('http');
   return new Promise((resolve) => {
@@ -99,9 +118,17 @@ async function confirm(host, port, { timeoutMs = 1500 } = {}) {
         res.on('end', () => {
           let payload = null;
           try { payload = JSON.parse(body); } catch { /* not ours */ }
-          const ours = res.statusCode === 200 && payload && payload.app && payload.version;
+          /* Either shape is this app: `app` on the admin meta, `appName` on the
+           * guest one. Both carry `version`. */
+          const name = payload && (payload.app || payload.appName);
+          const ours = res.statusCode === 200 && Boolean(name && payload.version);
           resolve(ours
-            ? { ok: true, app: String(payload.app), version: String(payload.version), hostname: String(payload.hostname || '') }
+            ? {
+              ok: true,
+              app: String(name),
+              version: String(payload.version),
+              hostname: String(payload.hostname || payload.host || ''),
+            }
             : { ok: false, reason: res.statusCode === 200 ? 'something else answers at that address' : `it answered ${res.statusCode}` });
         });
       },

@@ -67,6 +67,13 @@ function row(machine, { current = false, found = false, actions = '' } = {}) {
   </div>`;
 }
 
+/* A row with no address cannot be chosen — say so instead of drawing a button
+ * that quietly does nothing. */
+function useButton(machine, style) {
+  if (!machine.id) return '<span class="muted small">no address</span>';
+  return `<button class="btn ${style ? `${style} ` : ''}sm" data-use="${esc(machine.id)}" type="button">Use this</button>`;
+}
+
 function paint() {
   if (!host) return;
   const current = data.current;
@@ -101,7 +108,7 @@ function paint() {
         current: Boolean(current && current.id === m.id),
         actions: current && current.id === m.id
           ? '<span class="muted small">in use</span>'
-          : `<button class="btn primary sm" data-use="${esc(m.id)}" type="button">Use this</button>`,
+          : useButton(m, 'primary'),
       })).join('') || '<div class="empty">Nothing on this network answered. A machine on another network can still be reached by address — see below.</div>'
       : `<div class="empty">${scanning ? 'Looking for printer machines…' : 'No printer machine announced itself. Some networks block discovery; add one by address below.'}</div>`}
   </section>
@@ -121,7 +128,7 @@ function paint() {
     <div class="card-head"><h2>Remembered</h2><span class="chip">${known.length}</span></div>
     ${known.map(m => row(m, {
       current: Boolean(current && current.id === m.id),
-      actions: `${current && current.id === m.id ? '' : `<button class="btn sm" data-use="${esc(m.id)}" type="button">Use this</button>`}
+      actions: `${current && current.id === m.id ? '' : useButton(m, '')}
                 <button class="btn sm ghost" data-forget="${esc(m.id)}" type="button">Forget</button>`,
     })).join('')}
   </section>` : ''}
@@ -131,8 +138,14 @@ function paint() {
 
   host.querySelectorAll('[data-use]').forEach((button) => {
     button.addEventListener('click', async () => {
+      if (!button.dataset.use) return;
       button.disabled = true;
-      const result = await desktop.machines.use({ id: button.dataset.use }).catch(error => ({ ok: false, error: error.message }));
+      /* Hand over everything we know about it — name, tier, version, whether it
+       * came from the network — not just the id, so the machine is remembered
+       * as what it is rather than as an address somebody typed. */
+      const chosen = [...(data.found || []), ...(data.known || [])]
+        .find(m => m.id === button.dataset.use) || { id: button.dataset.use };
+      const result = await desktop.machines.use(chosen).catch(error => ({ ok: false, error: error.message }));
       if (!result || !result.ok) {
         toast('Could not switch machine', (result && result.error) || '', 'err');
         button.disabled = false;
@@ -166,7 +179,7 @@ function paint() {
         errorBox.classList.remove('hidden');
         return;
       }
-      await desktop.machines.use({ id: result.machine.id });
+      await desktop.machines.use(result.machine);
       toast(`${result.app} ${result.version}`.trim(), 'Connected — reloading the console', 'ok');
       setTimeout(() => window.location.reload(), 600);
     } finally {

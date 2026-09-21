@@ -339,7 +339,10 @@ function panelMenu() {
 
 /** Switch which machine the console is looking at. */
 function useMachine(machine) {
-  const saved = machines.use(machine.id || machine);
+  /* Hand the whole machine over, not just its id: `use` remembers what it is
+   * given, so collapsing it to an address here loses the name, tier and version
+   * the picker just learned — and the machine comes back named "127.0.0.1:8097". */
+  const saved = machines.use(machine);
   if (!saved) return null;
   note(`working with ${saved.name} (${saved.id})`);
   if (win && !win.isDestroyed()) win.reload();
@@ -720,9 +723,20 @@ function wireIpc() {
      * there: an mDNS record can outlive the machine that published it. */
     const checked = await Promise.all(found.map(async (machine) => {
       const alive = await nearby.confirm(machine.host, machine.port).catch(() => ({ ok: false }));
-      return { ...machine, ...alive, reachable: Boolean(alive.ok) };
+      /* Every row needs an id to be clickable, whatever the browse returned. */
+      const addr = machines.address(machine);
+      return {
+        ...machine,
+        ...alive,
+        id: addr ? machines.idFor(addr) : '',
+        /* Found, not typed: keep it that way when it is chosen. */
+        source: 'mdns',
+        reachable: Boolean(alive.ok),
+      };
     }));
-    push(`network scan: ${checked.length} machine(s) answered`);
+    /* Count what answered, not what was seen: an mDNS record outlives the
+     * machine, and "3 answered" over a list of unreachable rows reads as a lie. */
+    push(`network scan: ${checked.length} machine(s) on the network, ${checked.filter(m => m.reachable).length} answering`);
     return { current: machines.current(), found: checked, known: machines.list() };
   });
 
@@ -760,6 +774,14 @@ function wireIpc() {
     const result = shopStore.save(accountId, state);
     return result === true ? { ok: true, savedAt: new Date().toISOString() } : { ok: false, error: (result && result.error) || 'could not write the local copy' };
   });
+
+  /* Which licence used this computer. A shop whose machine is switched off still
+   * has its books here; this is how it finds them without asking the machine. */
+  ipcMain.handle('pb:shop:account:remember', (event, account, machineId) => ({
+    ok: shopStore.rememberAccount(account || {}, String(machineId || '')),
+  }));
+
+  ipcMain.handle('pb:shop:account:last', (event, machineId) => shopStore.lastAccount(String(machineId || '')));
 
   ipcMain.handle('pb:server:restart', async () => {
     const meta = await restartServer();
@@ -805,6 +827,18 @@ function start(appProfile) {
    * shop's books and the log must never be shared between a machine's app and a
    * client's — they are different products on the same PC. */
   app.setName(profile.productName);
+  /* …and the path has to be set, not just the name.
+   *
+   * In a packaged build Electron has already worked out `userData` from
+   * package.json's `name` by the time this runs, so `setName` alone left all
+   * three apps writing into one folder — `%APPDATA%/printbridge` — sharing one
+   * machines list, one console sign-in and one set of books. A shop's app
+   * installed beside a machine's app would read the other one's data. Naming the
+   * path explicitly is the difference between "each app has its own data" being
+   * a comment and being true. */
+  try {
+    app.setPath('userData', path.join(app.getPath('appData'), profile.productName));
+  } catch { /* an unwritable profile is not worth refusing to start over */ }
 
   if (!app.requestSingleInstanceLock()) {
     app.quit();

@@ -9,7 +9,7 @@
  *
  * API calls and preview images are never cached — they are live state. */
 
-const VERSION = 'pb-v18';
+const VERSION = 'pb-v19';
 /* Only the walk-up print site is cached: a phone that scanned the QR keeps
  * working on a flaky connection. The marketing site is not cached: it is not
  * what anyone needs when the network is down. The console is not cached either

@@ -24,6 +24,7 @@ import * as connectionView from './views/connection.js';
 import * as pricingView from './views/pricing.js';
 import * as expensesView from './views/expenses.js';
 import * as reportsView from './views/reports.js';
+import { availableOffline as shopAvailableOffline } from './shop.js';
 
 const viewHost = document.getElementById('view');
 
@@ -173,6 +174,12 @@ function loginShell(message) {
         <button class="btn primary" id="login-submit" type="submit" style="width:100%;margin-top:14px">Sign in</button>
       </form>
       <div id="login-error" class="job-error ${message ? '' : 'hidden'}" style="margin-top:12px">${esc(message)}</div>
+      ${shell.picksMachine && shell.machine ? `
+      <div class="login-machine">
+        <span class="muted small">Working with <strong>${esc(shell.machine.name || shell.machine.id)}</strong>
+        <code>${esc(shell.machine.host)}:${esc(String(shell.machine.port))}</code></span>
+        <button class="btn sm ghost" id="login-machine" type="button">Choose a different machine</button>
+      </div>` : ''}
       <div class="login-foot">
         <div class="login-hint">The sign-in is printed in the server console on first run.<br>Lost it? Delete <code>data/access.json</code> and restart.</div>
         <a class="btn sm ghost" href="/print/">${icons.printer}<span>Print page</span></a>
@@ -201,6 +208,38 @@ function startLockCountdown(inputs, button, secondsLeft) {
   tick();
 }
 
+/**
+ * The first screen for an app that manages somebody else's machine.
+ *
+ * The shop's app and the customer's app do not *have* a server until one is
+ * chosen, so the session call has nothing to answer it — which is why a fresh
+ * install used to open on a sign-in form saying "the print server is not
+ * responding. Is it running?". It was, elsewhere; this app just had not been
+ * told where. The machine picker is the honest first screen: choose one, the
+ * page reloads pointed at it, and the sign-in that follows is a real one.
+ */
+export async function showMachinePicker({ unresponsive = false } = {}) {
+  signedIn = false;
+  disconnectEvents();
+  document.body.classList.add('admin-locked');
+  clearLayers();
+  const layer = makeLayer();
+  const heading = document.createElement('p');
+  heading.className = 'muted small';
+  heading.style.margin = '0 0 14px';
+  heading.textContent = unresponsive
+    ? `The machine this console was pointed at${shell.machine ? ` (${shell.machine.name})` : ''} did not answer — it may be switched off. Choose the machine to work with, or wake that one up.`
+    : 'Step 1 of 2 — choose the printer machine this console manages. Signing in comes next.';
+  layer.appendChild(heading);
+  try {
+    await connectionView.render(layer);
+  } catch (error) {
+    layer.innerHTML = `<div class="card"><h1>Find your machine</h1>
+      <p class="lead">${esc(shell.offlineHint || 'Choose the printer machine this app manages.')}</p>
+      <p class="muted small">The picker could not open: ${esc(error.message)}</p></div>`;
+  }
+}
+
 export function showLogin({ message = '' } = {}) {
   signedIn = false;
   disconnectEvents();
@@ -215,6 +254,12 @@ export function showLogin({ message = '' } = {}) {
   const button = layer.querySelector('#login-submit');
   const error = layer.querySelector('#login-error');
   user.focus();
+
+  /* A console app can be pointed at the wrong machine — the shop moved it, the
+   * address changed, somebody typed it in — and then the sign-in here can never
+   * succeed. Without this the only way out was deleting machines.json by hand,
+   * because the menus that reach the picker sit behind being signed in. */
+  layer.querySelector('#login-machine')?.addEventListener('click', () => showMachinePicker());
 
   // A browser's autofill and a kiosk keyboard do not always submit a form by
   // themselves; make Enter explicit.
@@ -524,9 +569,23 @@ desktop.onNavigate((hash) => {
   else location.hash = hash;
 });
 
-api.session().then((status) => {
-  if (status.authenticated) return enterApp();
-  return showLogin({ message: status.open ? '' : '' });
-}).catch(() => {
-  showLogin({ message: 'The print server is not responding. Is it running?' });
-});
+/* Which screen comes first is the app's business, not the server's. An app that
+ * picks a machine has to pick it before there is a server to ask anything of. */
+if (shell.picksMachine && !shell.machine) {
+  showMachinePicker();
+} else {
+  api.session().then((status) => {
+    if (status.authenticated) return enterApp();
+    return showLogin({ message: status.open ? '' : '' });
+  }).catch(async () => {
+    /* The machine did not answer. A shop's books are on this computer, so
+     * dropping to the machine picker would lock the owner out of the one part
+     * of this app that does not need the machine at all. */
+    if (shell.picksMachine && await shopAvailableOffline().catch(() => false)) {
+      toast('Working offline', 'The machine is not answering — these are the books saved on this computer. Changes wait and sync when it is back.', 'info', 9000);
+      return enterApp();
+    }
+    if (shell.picksMachine) return showMachinePicker({ unresponsive: true });
+    return showLogin({ message: 'The print server is not responding. Is it running?' });
+  });
+}

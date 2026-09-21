@@ -304,6 +304,13 @@ function quit() {
 function start(appProfile) {
   profile = appProfile;
   app.setName(profile.productName);
+  /* Its own folder, explicitly: a packaged build has already resolved `userData`
+   * from package.json's `name`, so the name alone is not enough — without this,
+   * the customer's app and the shop's app on one laptop share their remembered
+   * machines. See the same line in shared/app.js. */
+  try {
+    app.setPath('userData', path.join(app.getPath('appData'), profile.productName));
+  } catch { /* an unwritable profile is not worth refusing to start over */ }
 
   if (!app.requestSingleInstanceLock()) {
     app.quit();

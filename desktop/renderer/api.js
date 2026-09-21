@@ -242,6 +242,13 @@ export const desktop = {
   shop: {
     load: (accountId) => (bridge && bridge.shop ? bridge.shop.load(accountId) : Promise.resolve({ document: null })),
     save: (accountId, state) => (bridge && bridge.shop ? bridge.shop.save(accountId, state) : Promise.resolve({ ok: false, error: 'not in the desktop app' })),
+    /* Which licence used this computer — the offline half of local-first. */
+    rememberAccount: (account, machineId) => (bridge && bridge.shop && bridge.shop.rememberAccount
+      ? bridge.shop.rememberAccount(account, machineId)
+      : Promise.resolve({ ok: false })),
+    lastAccount: (machineId) => (bridge && bridge.shop && bridge.shop.lastAccount
+      ? bridge.shop.lastAccount(machineId)
+      : Promise.resolve(null)),
   },
 
   notifications: {

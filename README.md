@@ -1,14 +1,16 @@
-# <img src="docs/printer.svg" width="28" height="28" alt=""> PrintBridge 3.0
+# <img src="docs/printer.svg" width="28" height="28" alt=""> PrintBridge 3.1.1
 
-Self-hosted print infrastructure for workspaces and shops: **two sites, one
-printer, and an app to set it up.**
+Self-hosted print infrastructure for workspaces and shops: **two public sites,
+one printer, and three desktop apps to run the business around it.**
 
 | Surface | Where | Who it is for |
 |---|---|---|
 | **Main site** | `/` | the company — about, product, features, pricing, contact — with two buttons: **Print** and **Log in** |
 | **Print site** | `/print` | whoever is standing at the printer: enter a printer code, send a document, get a **token number** |
 | **Owner site** | `/owner` | the customer: redeem the access code from their licence email, sign in, see their licence |
-| **The app** | the desktop app | the machine that owns the printer: the service, the setup, every job, every code, prices, storage, access, and the licence |
+| **Workspace app** | the machine's desktop app | the machine that owns the printer: the service, the setup, every job, every code, storage, access, and the licence |
+| **Shop app** | the owner's desktop app | the business on top of a machine it does not own: pricing, expenses and revenue, plus a copy of the books that works with the machine switched off |
+| **Client app** | the customer's desktop app | printing without a browser: the machines near you, and the one you use opened and ready |
 
 The control room is **not a web page**. It lives in the desktop app, which serves
 its own interface on `127.0.0.1` and proxies everything else to the print
@@ -82,26 +84,36 @@ to register a walk-up printer and print its sticker card — and the machine is
 open for business. **Setup** on the app's first panel reads all of that back and
 tells you what is still missing.
 
-### Or run the desktop app instead
+### Or run a desktop app instead
 
 On the laptop that owns the printer, you do not need a terminal at all:
 
 ```bash
 npm install
-npm run desktop        # or build the installer: npm run desktop:build
+npm run desktop:workspace   # the machine's app  (npm run desktop is the same thing)
+npm run desktop:shop        # the owner's app    (its own installer: npm run desktop:build:shop)
+npm run desktop:client      # the customer's app (npm run desktop:build:client)
 ```
 
-The app **is** the machine: it starts the print service, hosts the console, and
-opens on a live checklist of the six things that have to be true before a
-stranger can walk up and print. Every panel the console ever had is in there —
-Queue, Print codes, Printers, the printer connection, Settings, Access — plus
-**Account** for the licence and **Setup** for the machine itself.
+The **workspace** app **is** the machine: it starts the print service, hosts the
+console, and opens on a live checklist of the six things that have to be true
+before a stranger can walk up and print. Every panel the console ever had is in
+there — Queue, Print codes, Printers, the printer connection, Settings, Access —
+plus **Account** for the licence and **Setup** for the machine itself.
 
-It also keeps the service alive: it starts with Windows, hides to the tray when
-the window is closed (guests keep printing), holds the laptop awake while jobs
-are in flight, streams the service log into the interface, and can run the
-project's own end-to-end suites against your printer on demand. It updates itself
-from GitHub Releases and says so in the status strip along the bottom.
+The **shop** app points that same console at a machine on the network and adds
+what a machine has no business knowing: a pricing manager that writes the
+machine's per-page rates, expenses, and revenue. Its books live on the laptop and
+sync record by record, so a counter that loses the network does not lose the
+day's takings.
+
+The **client** app lists the printer machines on the network and opens the one
+you use, so the walk-up flow becomes a thing you double-click.
+
+All three keep themselves running: start with Windows, hide to the tray when the
+window is closed (guests keep printing), hold the laptop awake while jobs are in
+flight, stream the log into the interface, and update themselves from GitHub
+Releases.
 
 > Full detail, including packaging, updates and where the data lives:
 > **[docs/desktop-app.md](docs/desktop-app.md).**

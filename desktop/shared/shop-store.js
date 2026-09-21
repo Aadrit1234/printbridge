@@ -14,6 +14,17 @@
  *     lastReport    the last revenue report fetched, so the panel can show it offline
  *
  * One file per account, because one app can hold more than one licence.
+ *
+ *   <userData>/shop/last-account.json
+ *     which licence this computer last used, per machine — see below
+ *
+ * That second file exists for the case the whole design is for. Working offline
+ * needs to know *whose* books are on this laptop, and the only thing that can
+ * answer that is the machine — so a shop whose machine was switched off opened
+ * on the machine picker and could not reach its own expenses. Remembering the
+ * licence locally makes the local copy usable without the network, which is the
+ * promise; forgetting it would make "local first" mean "local, when online".
+ * Keyed by machine id, because one laptop can be pointed at more than one.
  */
 
 const fs = require('fs');
@@ -90,4 +101,71 @@ function save(accountId, state) {
   }
 }
 
-module.exports = { init, load, save, empty, safeId };
+/* ---------------- which licence was last used here ---------------- */
+
+function accountsFile() {
+  return dir ? path.join(dir, 'last-account.json') : null;
+}
+
+function readAccounts() {
+  const file = accountsFile();
+  if (!file) return {};
+  try {
+    const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return saved && typeof saved === 'object' ? saved : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Remember which licence last used this computer, for one machine.
+ *
+ * The account is kept as the API's own view of it (id, email, name, plan), so a
+ * panel can show the licence it is about to read books for without the network.
+ */
+function rememberAccount(account, machineId = '') {
+  const id = account && safeId(account.id);
+  if (!id) return false;
+  const file = accountsFile();
+  if (!file) return false;
+  try {
+    const all = readAccounts();
+    all[String(machineId || '').slice(0, 120)] = {
+      account: {
+        id,
+        email: String(account.email || '').slice(0, 200),
+        name: String(account.name || '').slice(0, 120),
+        plan: String(account.plan || '').slice(0, 60),
+        planLabel: String(account.planLabel || '').slice(0, 60),
+        status: String(account.status || '').slice(0, 40),
+      },
+      at: new Date().toISOString(),
+    };
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(all, null, 2));
+    fs.renameSync(tmp, file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The licence this computer last used, for this machine if it knows one.
+ *
+ * Falls back to the most recently remembered account, because an app that has
+ * been pointed at a machine for a while and then cannot reach it should still
+ * find its own books — that is the situation this exists for.
+ */
+function lastAccount(machineId = '') {
+  const all = readAccounts();
+  const exact = all[String(machineId || '').slice(0, 120)];
+  if (exact && exact.account) return exact;
+  const entries = Object.values(all).filter(entry => entry && entry.account);
+  if (!entries.length) return null;
+  entries.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  return entries[0];
+}
+
+module.exports = { init, load, save, empty, safeId, rememberAccount, lastAccount };

@@ -1,6 +1,6 @@
 {
   "name": "printbridge",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Self-hosted print infrastructure: a walk-up print site with printer codes and token numbers, and a desktop app that runs the service, sets the printer up and holds the console — over a USB Windows queue, IPP/AirPrint, or CUPS.",
   "main": "server.js",
   "scripts": {

@@ -19,8 +19,9 @@
 
 import { ownerApi, shopApi, desktop } from './api.js';
 
-let state = null;      // { accountId, document, lastSyncedAt, dirty, lastReport }
+let state = null;      // { accountId, document, lastSyncedAt, dirty, lastReport, offline }
 let account = null;
+let machineKey;
 const listeners = new Set();
 let syncing = false;
 
@@ -47,6 +48,17 @@ export function ready() {
   return Boolean(state && state.accountId);
 }
 
+/** True when these books came from this computer because the machine was away. */
+export function offline() {
+  return Boolean(state && state.offline);
+}
+
+/** Can the books be opened with the machine switched off? */
+export async function availableOffline() {
+  const remembered = await desktop.shop.lastAccount(await machineId()).catch(() => null);
+  return Boolean(remembered && remembered.account);
+}
+
 function epoch() {
   return new Date(0).toISOString();
 }
@@ -67,15 +79,54 @@ function isEmpty(document) {
     && (!document.settings || !document.settings.updatedAt || document.settings.updatedAt === epoch());
 }
 
-/** Which licence is signed in — the books belong to it and to nobody else. */
+/**
+ * Which machine this console is pointed at.
+ *
+ * Only the offline path needs it, and only to know which licence's books on
+ * this computer to read — so it is asked for once, when it matters.
+ */
+async function machineId() {
+  if (machineKey !== undefined) return machineKey;
+  const info = await desktop.getInfo().catch(() => null);
+  machineKey = (info && info.machine && info.machine.id) || '';
+  return machineKey;
+}
+
+/**
+ * Which licence is signed in — the books belong to it and to nobody else.
+ *
+ * With the machine answering, that is the session. With it switched off, the
+ * licence this computer last used still owns the books saved here: an owner who
+ * cannot reach the printer's machine has not stopped being the owner, and the
+ * expenses panel is the one panel that must work on a morning like that. So the
+ * remembered licence stands in — marked offline, so nothing pretends a sync
+ * happened.
+ */
 export async function load() {
-  const session = await ownerApi.session().catch(() => null);
+  let session = null;
+  let offline = false;
+  try {
+    session = await ownerApi.session();
+  } catch (error) {
+    const unreachable = !error.status || error.status >= 500;
+    if (unreachable) {
+      const remembered = await desktop.shop.lastAccount(await machineId()).catch(() => null);
+      if (remembered && remembered.account) {
+        session = { account: remembered.account, unreachable: true };
+        offline = true;
+      }
+    }
+  }
+
   account = session && session.account ? session.account : null;
   if (!account) {
     state = null;
     emit();
     return null;
   }
+  /* Remembered whenever the machine is there to be asked, so an outage later has
+   * something to fall back on. */
+  if (!offline) desktop.shop.rememberAccount(account, await machineId()).catch(() => {});
 
   const local = (await desktop.shop.load(account.id).catch(() => null)) || {};
   state = {
@@ -84,6 +135,9 @@ export async function load() {
     lastSyncedAt: local.lastSyncedAt || null,
     dirty: Boolean(local.dirty),
     lastReport: local.lastReport || null,
+    /* True when these books came from this computer because the machine could
+     * not be asked. A panel says so rather than showing a stale sync time. */
+    offline,
   };
 
   /* A brand-new install has nothing local: take the machine's copy. Never do

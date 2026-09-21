@@ -82,6 +82,16 @@ function filterHeaders(headers, target) {
   for (const [key, value] of Object.entries(headers)) {
     if (HOP_BY_HOP.has(key.toLowerCase())) continue;
     if (key.toLowerCase() === 'host') continue;
+    /* The browser's Origin describes *this* hop — the window talking to the host
+     * that served it — and it must not travel upstream. Forwarding it made the
+     * machine read a request from its own console as a cross-site call from
+     * http://127.0.0.1:<port>: harmless while the console sat beside the service
+     * (both loopback, so the machine recognised a local pair), but a 403 the
+     * moment the console is pointed at a machine across the network — which is
+     * precisely what the shop's and the customer's apps do. The host is the
+     * client of the print service here, exactly like curl or a native app, and
+     * the machine already treats a request with no Origin as trusted. */
+    if (key.toLowerCase() === 'origin') continue;
     out[key] = value;
   }
   out.host = `${target.host}:${target.port}`;
