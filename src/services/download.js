@@ -11,10 +11,10 @@
  *   RELEASES_REPO   the GitHub repository, default Aadrit1234/printbridge
  *   RELEASES_BASE   serve the files from somewhere else (your own mirror)
  *
- * Publish a release with the same tag the version implies (v3.1.0) and the
+ * Publish a release with the same tag the version implies (v<version>) and the
  * links below go live:
  *
- *   gh release create v3.1.0 release/*.exe --title "PrintBridge 3.1.0"
+ *   gh release create v<version> release/*.exe release/*.blockmap
  */
 
 const VERSION = require('../../package.json').version;
