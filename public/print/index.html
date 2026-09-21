@@ -10,7 +10,28 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
 <link rel="apple-touch-icon" href="/assets/icon-192.png">
-<link rel="stylesheet" href="./print.css">
+<style>
+  /* The floor — what this page looks like when its stylesheet is slow to arrive
+   * or never does.
+   *
+   * Without it, an unstyled page is one enormous printer icon on a phone: the
+   * inline icons carry no size of their own, so the browser paints them at the
+   * width of their container, and the first thing somebody sees on flaky
+   * counter Wi-Fi reads as "this site is broken". Every rule here is phrased to
+   * lose to the stylesheet — element selectors and :where() only, and the
+   * stylesheet is linked after this — so the real design takes over untouched
+   * the moment it loads. This only has to be legible, not pretty. */
+  html { background: #0a0d16; color: #eef1f8; }
+  html[data-theme='day'], html[data-theme='light'] { background: #f4f6fb; color: #10141f; }
+  body { margin: 0; font: 16px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  :where(svg) { width: 1.15em; height: 1.15em; }
+  :where(img, canvas) { max-width: 100%; height: auto; }
+  :where(input, select, textarea, button) { font: inherit; max-width: 100%; padding: 10px 12px; }
+  :where(button) { cursor: pointer; }
+  :where(a) { color: inherit; }
+  .backdrop { display: none; }
+</style>
+<link rel="stylesheet" href="./print.css?v=3.1.1">
 <script src="/config.js"></script>
 <script>
   /* The theme is decided before the first paint so nobody sees a flash of the
@@ -94,7 +115,7 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="./print.js"></script>
+<script src="./print.js?v=3.1.1"></script>
 <script>
   /* Installable for the people who use the same printer all day. Failures are
    * silent: a service worker is a nicety, never a requirement. */

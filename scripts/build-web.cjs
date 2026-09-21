@@ -75,6 +75,27 @@ if (apiBase && !/^https?:\/\/[^/\s]+$/.test(apiBase)) {
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.cpSync(SRC, OUT, { recursive: true });
 
+/* ---------------- the floor ---------------- */
+
+/* Every page that links a stylesheet must carry an inline one before it.
+ *
+ * The inline icons have no size of their own, so a page whose stylesheet is
+ * slow — or blocked, or lost to a flaky connection at the printer — paints one
+ * enormous printer icon at the width of the phone and reads as broken. The
+ * floor fixes that, and it is the kind of thing a redesign deletes by accident,
+ * so the build checks it rather than trusting anybody to remember. */
+const FLOOR_PAGES = ['index.html', 'print/index.html', 'owner/index.html'];
+for (const page of FLOOR_PAGES) {
+  const file = path.join(OUT, page);
+  if (!fs.existsSync(file)) { fail(`${page} is missing from the bundle`); }
+  const html = fs.readFileSync(file, 'utf8');
+  const style = html.indexOf('<style>');
+  const sheet = html.search(/<link[^>]+rel=["']stylesheet["']/);
+  if (sheet !== -1 && (style === -1 || style > sheet)) {
+    fail(`${page} links a stylesheet without an inline floor before it —\n  an unstyled paint is one huge icon. See the <style> block at the top of ${page}.`);
+  }
+}
+
 /* ---------------- runtime config ---------------- */
 
 const rawAdmin = normalize(process.env.PRINTBRIDGE_ADMIN_URL);

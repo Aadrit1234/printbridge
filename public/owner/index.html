@@ -8,8 +8,23 @@
 <title>PrintBridge — Owner sign in</title>
 <link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
 <link rel="apple-touch-icon" href="/assets/icon-192.png">
-<link rel="stylesheet" href="/assets/app.css">
-<link rel="stylesheet" href="./owner.css">
+<style>
+  /* The floor — what this page looks like when its stylesheets are slow to
+   * arrive or never do. The inline icons carry no size of their own, so without
+   * this an unstyled page is one image blown up to the width of the screen.
+   * Every rule loses to the stylesheets below it; this only has to be legible. */
+  html { background: #0a0d16; color: #eef1f8; }
+  html[data-theme='day'], html[data-theme='light'] { background: #f4f6fb; color: #10141f; }
+  body { margin: 0; font: 16px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  :where(svg) { width: 1.15em; height: 1.15em; }
+  :where(img, canvas) { max-width: 100%; height: auto; }
+  :where(input, select, textarea, button) { font: inherit; max-width: 100%; padding: 10px 12px; }
+  :where(button) { cursor: pointer; }
+  :where(a) { color: inherit; }
+  .backdrop { display: none; }
+</style>
+<link rel="stylesheet" href="/assets/app.css?v=3.1.1">
+<link rel="stylesheet" href="./owner.css?v=3.1.1">
 <script src="/config.js"></script>
 <script>
   /* The shared theme choice, applied before the first paint. */
@@ -144,6 +159,6 @@
   </footer>
 </div>
 
-<script type="module" src="./owner.js"></script>
+<script type="module" src="./owner.js?v=3.1.1"></script>
 </body>
 </html>
